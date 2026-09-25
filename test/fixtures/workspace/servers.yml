@@ -1,0 +1,7 @@
+servers_defaults:
+  port: 8080
+servers:
+  web:
+    port: 80
+  db:
+    port: 5432

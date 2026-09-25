@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=schemas/policy.schema.json
+ignore_rules:
+  dev_findings:
+    name: "Ignore dev findings"
+    reason: "WONT_FIX"
+    project: "checkout"
+scan_policies:
+  iac_default:
+    name: "IaC default"
+    severity: 3

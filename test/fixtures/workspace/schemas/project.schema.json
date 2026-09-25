@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "project.yaml",
+  "type": "object",
+  "properties": {
+    "projects": {
+      "description": "Projects, keyed by a stable name.",
+      "type": ["object", "null"],
+      "additionalProperties": { "$ref": "#/definitions/project" },
+      "x-yamlctl": { "defaults": "projects_defaults", "title": "name" }
+    },
+    "projects_defaults": {
+      "description": "Values every project takes unless it sets its own.",
+      "anyOf": [{ "$ref": "#/definitions/project" }, { "type": "null" }]
+    }
+  },
+  "required": ["projects"],
+  "additionalProperties": false,
+  "definitions": {
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "description": "Display name.\nShown in the portal.", "type": ["string", "null"] },
+        "slug": { "type": ["string", "null"] },
+        "archived": { "type": ["boolean", "null"], "default": false },
+        "is_folder": { "description": "A folder holds other projects.", "type": ["boolean", "null"] },
+        "parent_project": {
+          "description": "Key of the folder holding this project.",
+          "type": ["string", "null"],
+          "x-yamlctl": { "key-of": ".", "target-must": { "is_folder": true }, "immutable": "moving a project recreates it" }
+        },
+        "priority": { "type": ["integer", "null"] },
+        "weight": { "type": ["number", "null"] },
+        "account": { "description": "Account number, kept as text.", "type": ["string", "null"] },
+        "risk_profile": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "business_impact": { "description": "One of LBI, MBI, HBI.", "enum": ["LBI", "MBI", "HBI", null] },
+            "regulatory_standards": { "type": ["array", "null"], "items": { "enum": ["ISO_27001", "SOC", "GDPR"] } }
+          }
+        },
+        "account_links": {
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["account"],
+            "properties": {
+              "account": { "type": "string" },
+              "environment": { "enum": ["PRODUCTION", "STAGING"] }
+            }
+          }
+        },
+        "tags": { "type": ["object", "null"], "additionalProperties": { "type": "string" } },
+        "labels": { "type": ["object", "null"], "patternProperties": { "^x-": { "type": "string" } }, "additionalProperties": false }
+      }
+    }
+  }
+}

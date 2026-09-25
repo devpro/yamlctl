@@ -1,0 +1,55 @@
+name: CI
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+# purpose: Continuous Integration pipeline
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+concurrency:
+  group: "${{ github.ref }}-ci"
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  markup-lint:
+    name: Markup
+    uses: devpro/github-workflow-parts/.github/workflows/reusable-markup-lint.yml@58dbfe0e9927f2191796ac616a4bb43126e59d98
+
+  test:
+    name: "Test on Node.js ${{ matrix.node-version }}"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      matrix:
+        # the oldest version package.json accepts, and the ones after it
+        node-version: [20, 22, 24]
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Verify package installation and run
+        run: npm run smoke
+
+      # The workflows name their SchemaStore schema, so this is a remote schema fetched and applied on every run, by the code under test.
+      - name: Check the workflows against their schema
+        run: node bin/yamlctl.js -C .github/workflows check

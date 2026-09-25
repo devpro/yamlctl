@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=schemas/project.schema.json
+# Projects, one entry per application.
+projects_defaults:
+  archived: false
+projects:
+  platform:
+    name: "Platform"
+    is_folder: true
+  checkout:
+    name: "Checkout"
+    # kept across every edit
+    parent_project: "platform"
+    risk_profile:
+      business_impact: "HBI"
