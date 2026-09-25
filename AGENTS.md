@@ -45,14 +45,16 @@ Applies to Markdown, code comments, commit messages, command output and prose in
 ## Design decisions
 
 - **The schema is the only source of knowledge.**
-  A rule about a particular kind of data never goes in the code: it goes in the schema, as a standard keyword or an `x-yamlctl` one, and a new `x-yamlctl` keyword is documented in `docs/schema-extensions.md` in the same change.
+  A rule about a particular kind of data never goes in the code: it goes in the schema, as a standard keyword or an `x-yamlctl` one,
+  and a new `x-yamlctl` keyword is documented in `docs/schema-extensions.md` in the same change.
 - **The file is found from the name, the schema from the file.**
   A resource is a file stem or a map name, and the schema is the one the file names on its `yaml-language-server` line, so an editor and yamlctl check against the same schema.
 - **Every schema location is an absolute URI with a pointer fragment**, `file:` or `https:`, so a `$ref` into another file or onto the network needs no special case.
   Remote documents are all fetched by `prefetch` before a command runs, which is the only asynchronous step: everything after it, `run` included, stays synchronous.
   They are cached for a day, fall back to a stale copy when a fetch fails, and `--offline` never fetches.
 - **A named schema that cannot be loaded blocks a write** and only warns on a read, since checking nothing where the file asked for a check is worse than stopping.
-- **A failing alternative is reported through its closest branch**: the value validated against each branch on its own, ranked by type agreement, then by problems on the value itself, then by total, the way established validators pick a best match.
+- **A failing alternative is reported through its closest branch**: the value validated against each branch on its own, ranked by type agreement,
+  then by problems on the value itself, then by total, the way established validators pick a best match.
 - **A map of entries is recognised by shape**, a top-level property whose `additionalProperties` is an object schema, so a schema needs nothing added to be used.
 - **A value is typed by the schema**, never by YAML: `005217217997` stays a string where the schema says string.
 - **Nothing is written unless something changed**, and nothing is written at all when a check fails.

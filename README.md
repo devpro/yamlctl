@@ -128,15 +128,15 @@ yamlctl resources                                every resource in the directory
 yamlctl check                                    every file in the directory against its schema
 ```
 
-| Option | |
-|--------|---|
-| `-C, --dir <dir>` | the directory holding the data files, the current one by default |
-| `-f, --file <file>` | the data file, for a resource the directory does not name on its own |
-| `-o, --output <format>` | `yaml` or `json` for `get` and `list`, `name` for `list` |
-| `--from <file>` | the entry to set, `-` for standard input |
-| `--force` | accept a change the schema marks immutable |
-| `--offline` | read remote schemas from the cache only, never from the network, also `YAMLCTL_OFFLINE=1` |
-| `--refresh` | fetch remote schemas again even when the cache holds a recent copy |
+Option                  | Action
+------------------------|------------------------------------------------------------------------------------------
+`-C, --dir <dir>`       | the directory holding the data files, the current one by default
+`-f, --file <file>`     | the data file, for a resource the directory does not name on its own
+`-o, --output <format>` | `yaml` or `json` for `get` and `list`, `name` for `list`
+`--from <file>`         | the entry to set, `-` for standard input
+`--force`               | accept a change the schema marks immutable
+`--offline`             | read remote schemas from the cache only, never from the network, also `YAMLCTL_OFFLINE=1`
+`--refresh`             | fetch remote schemas again even when the cache holds a recent copy
 
 A **resource** is a file, `project` for `project.yaml` or `project.yml`, or a map of entries inside one, `ignore_rules` for the `ignore_rules:` map of whichever file holds it.
 A file holding several maps is listed whole by its own name and reached one map at a time by the map's name.

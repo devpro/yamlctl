@@ -18,11 +18,11 @@ Declared on the top-level property holding the entries.
 }
 ```
 
-| Keyword | Value | Effect |
-|---------|-------|--------|
-| `defaults` | the name of a sibling top-level property | the values every entry inherits unless it sets its own, read by the rules below when an entry leaves a field out |
-| `title` | a field name, `name` by default | the field `list` shows beside each key |
-| `entries` | `false` | the property is not a map of entries, even though its shape says it could be |
+Keyword    | Value                                    | Effect
+-----------|------------------------------------------|-----------------------------------------------------------------------------------------------------------------
+`defaults` | the name of a sibling top-level property | the values every entry inherits unless it sets its own, read by the rules below when an entry leaves a field out
+`title`    | a field name, `name` by default          | the field `list` shows beside each key
+`entries`  | `false`                                  | the property is not a map of entries, even though its shape says it could be
 
 A map of entries is otherwise found from its shape alone: a top-level property whose `additionalProperties` is an object schema.
 A map of strings, labels or tags, is a map of values and never a map of entries.
@@ -42,11 +42,11 @@ Declared on a top-level field of the entry schema.
 }
 ```
 
-| Keyword | Value | Effect |
-|---------|-------|--------|
-| `key-of` | `.` for the map the field belongs to, or the name of another map of the same file | the value, or every item of a list, is the key of an entry of that map, which must exist; an entry naming itself is refused |
-| `target-must` | an object of field names and values | the entry named has those values, read with that map's defaults applied |
-| `immutable` | `true`, or the reason as text | changing the value on an existing entry needs `--force`, and the reason is shown |
+Keyword       | Value                                                                             | Effect
+--------------|-----------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------
+`key-of`      | `.` for the map the field belongs to, or the name of another map of the same file | the value, or every item of a list, is the key of an entry of that map, which must exist; an entry naming itself is refused
+`target-must` | an object of field names and values                                               | the entry named has those values, read with that map's defaults applied
+`immutable`   | `true`, or the reason as text                                                     | changing the value on an existing entry needs `--force`, and the reason is shown
 
 `delete` refuses to remove an entry another one still names through `key-of`, in any map of the file.
 `check` applies `key-of` and `target-must` to every entry, since a file edited by hand never went through `set`; `immutable` only concerns a change, so `check` does not apply it.

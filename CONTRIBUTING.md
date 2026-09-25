@@ -23,11 +23,11 @@ Both run in CI on Node.js 20, 22 and 24.
 
 ```txt
 bin/yamlctl.js       entry point
+docs/                schema-extensions.md, the x-yamlctl keywords
+examples/            the data file and schema the README runs against
+scripts/             smoke_pack.sh
 src/                 one module per concern, described in AGENTS.md
 test/                one test file per module, and fixtures/workspace
-examples/            the data file and schema the README runs against
-docs/                schema-extensions.md, the x-yamlctl keywords
-scripts/             smoke_pack.sh
 ```
 
 ## Release

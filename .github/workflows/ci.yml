@@ -50,6 +50,5 @@ jobs:
       - name: Verify package installation and run
         run: npm run smoke
 
-      # The workflows name their SchemaStore schema, so this is a remote schema fetched and applied on every run, by the code under test.
       - name: Check the workflows against their schema
         run: node bin/yamlctl.js -C .github/workflows check
