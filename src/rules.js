@@ -30,7 +30,8 @@ const effective = (entry, defaults, field) => (entry?.[field] !== undefined && e
 const same = (a, b) => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
 
 // The reasons an entry about to be written breaks a rule, empty when it does not.
-export function checkSet({ schema, data, map, key, entry, force }) {
+// `data` is the file as it will be once written, so an entry may name another written by the same command, and `previous` the file as it is, which an immutable field is compared with.
+export function checkSet({ schema, data, previous = data, map, key, entry, force }) {
   if (!schema) return [];
   const problems = [];
   const defaults = defaultsOf(schema, data, map);
@@ -47,7 +48,7 @@ export function checkSet({ schema, data, map, key, entry, force }) {
           continue;
         }
         if (!Object.hasOwn(targets, name)) {
-          problems.push(`${rule.field}: ${name} is not an entry of ${targetMap}, set it first`);
+          problems.push(`${rule.field}: ${name} is not an entry of ${targetMap}, create it first`);
           continue;
         }
         const targetDefaults = defaultsOf(schema, data, targetMap);
@@ -58,8 +59,8 @@ export function checkSet({ schema, data, map, key, entry, force }) {
       }
     }
 
-    if (rule.immutable && Object.hasOwn(data[map] ?? {}, key) && !force) {
-      const before = effective(data[map][key], defaults, rule.field);
+    if (rule.immutable && Object.hasOwn(previous[map] ?? {}, key) && !force) {
+      const before = effective(previous[map][key], defaultsOf(schema, previous, map), rule.field);
       if (!same(before, value)) {
         const reason = typeof rule.immutable === 'string' ? `, ${rule.immutable}` : '';
         problems.push(`${rule.field}: changing ${JSON.stringify(before)} to ${JSON.stringify(value)} needs --force${reason}`);

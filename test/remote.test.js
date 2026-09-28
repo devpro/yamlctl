@@ -78,11 +78,11 @@ async function cli(dir, args, env) {
 test('a remote schema and the remote document its $ref leads to are fetched and applied', async () => {
   serveProject();
   const { dir, env } = remoteWorkspace();
-  assert.deepEqual(await cli(dir, ['project', 'set', 'two', 'name=Two', 'impact=HBI'], env), { code: 0, out: 'projects/two created\n', err: '' });
-  const refused = await cli(dir, ['project', 'set', 'two', 'impact=HIGH'], env);
+  assert.deepEqual(await cli(dir, ['project', 'apply', 'two', 'name=Two', 'impact=HBI'], env), { code: 0, out: 'projects/two created\n', err: '' });
+  const refused = await cli(dir, ['project', 'apply', 'two', 'impact=HIGH'], env);
   assert.equal(refused.code, 1);
   assert.match(refused.err, /projects\/two\.impact: must be one of "LBI", "MBI", "HBI"/);
-  assert.match((await cli(dir, ['project', 'set', 'two', 'nme=x'], env)).err, /nme: no such field in projects/);
+  assert.match((await cli(dir, ['project', 'apply', 'two', 'nme=x'], env)).err, /nme: no such field in projects/);
 });
 
 test('explain reads across the remote documents', async () => {
@@ -97,7 +97,7 @@ test('a fetched schema is cached, so the next command within a day makes no requ
   await cli(dir, ['project', 'list'], env);
   assert.equal(hits.get('/schemas/project.json'), 1);
   assert.equal(hits.get('/schemas/definitions.json'), 1);
-  await cli(dir, ['project', 'set', 'two', 'name=Two'], env);
+  await cli(dir, ['project', 'apply', 'two', 'name=Two'], env);
   await cli(dir, ['check'], env);
   assert.equal(hits.get('/schemas/project.json'), 1);
   assert.equal(hits.get('/schemas/definitions.json'), 1);
@@ -127,7 +127,7 @@ test('--offline reads the cache and never the network', async () => {
   await cli(dir, ['project', 'list'], env);
   served.clear();
   ageCache(env, 30);
-  assert.deepEqual(await cli(dir, ['project', 'set', 'two', 'name=Two', '--offline'], env), { code: 0, out: 'projects/two created\n', err: '' });
+  assert.deepEqual(await cli(dir, ['project', 'apply', 'two', 'name=Two', '--offline'], env), { code: 0, out: 'projects/two created\n', err: '' });
   assert.equal(hits.get('/schemas/project.json'), 1);
 });
 
@@ -143,7 +143,7 @@ test('--offline with nothing cached refuses a write and names what is missing', 
   serveProject();
   const { dir, env } = remoteWorkspace();
   const before = read(dir, 'project.yaml');
-  const { code, err } = await cli(dir, ['project', 'set', 'two', 'name=Two', '--offline'], env);
+  const { code, err } = await cli(dir, ['project', 'apply', 'two', 'name=Two', '--offline'], env);
   assert.equal(code, 1);
   assert.match(err, /project\.json is not in the cache, and --offline does not fetch it, so it is not written/);
   assert.equal(read(dir, 'project.yaml'), before);
@@ -156,7 +156,7 @@ test('a server that cannot be reached falls back to the cached copy, with a warn
   await cli(dir, ['project', 'list'], env);
   served.clear();
   ageCache(env, 3);
-  const { code, out, err } = await cli(dir, ['project', 'set', 'two', 'name=Two'], env);
+  const { code, out, err } = await cli(dir, ['project', 'apply', 'two', 'name=Two'], env);
   assert.equal(code, 0, err);
   assert.equal(out, 'projects/two created\n');
   assert.match(err, /warning: http:\/\/127\.0\.0\.1:\d+\/schemas\/project\.json could not be fetched \(HTTP 404\), using the copy cached 3 days ago/);
@@ -164,7 +164,7 @@ test('a server that cannot be reached falls back to the cached copy, with a warn
 
 test('a schema that cannot be fetched and was never cached blocks a write, and a read only warns', async () => {
   const { dir, env } = remoteWorkspace('/schemas/missing.json');
-  const refused = await cli(dir, ['project', 'set', 'two', 'name=Two'], env);
+  const refused = await cli(dir, ['project', 'apply', 'two', 'name=Two'], env);
   assert.equal(refused.code, 1);
   assert.match(refused.err, /missing\.json could not be fetched: HTTP 404, so it is not written/);
   const listed = await cli(dir, ['project', 'list'], env);
@@ -176,7 +176,7 @@ test('a schema that cannot be fetched and was never cached blocks a write, and a
 test('a missing document behind a $ref makes the schema unusable rather than half applied', async () => {
   served.set('/schemas/project.json', project);
   const { dir, env } = remoteWorkspace();
-  const { code, err } = await cli(dir, ['project', 'set', 'two', 'name=Two'], env);
+  const { code, err } = await cli(dir, ['project', 'apply', 'two', 'name=Two'], env);
   assert.equal(code, 1);
   assert.match(err, /definitions\.json/);
   assert.equal(read(dir, 'project.yaml').includes('two'), false);
@@ -185,7 +185,7 @@ test('a missing document behind a $ref makes the schema unusable rather than hal
 test('a response that is not JSON is a failed fetch, not a schema', async () => {
   served.set('/schemas/project.json', '<html>login</html>');
   const { dir, env } = remoteWorkspace();
-  assert.match((await cli(dir, ['project', 'set', 'two', 'name=Two'], env)).err, /project\.json could not be fetched: .*JSON/);
+  assert.match((await cli(dir, ['project', 'apply', 'two', 'name=Two'], env)).err, /project\.json could not be fetched: .*JSON/);
 });
 
 test('a local schema whose $ref leads onto the network has that document fetched', async () => {
@@ -194,8 +194,8 @@ test('a local schema whose $ref leads onto the network has that document fetched
   const env = { YAMLCTL_CACHE_DIR: join(dir, '.cache') };
   write(dir, 'schema.json', JSON.stringify({ type: 'object', properties: { projects: { type: 'object', additionalProperties: { $ref: `${base}/schemas/definitions.json#/project` } } } }));
   write(dir, 'project.yaml', '# yaml-language-server: $schema=schema.json\nprojects: {}\n');
-  assert.deepEqual(await cli(dir, ['project', 'set', 'one', 'name=One', 'impact=LBI'], env), { code: 0, out: 'projects/one created\n', err: '' });
-  assert.match((await cli(dir, ['project', 'set', 'one', 'impact=X'], env)).err, /must be one of "LBI", "MBI", "HBI"/);
+  assert.deepEqual(await cli(dir, ['project', 'apply', 'one', 'name=One', 'impact=LBI'], env), { code: 0, out: 'projects/one created\n', err: '' });
+  assert.match((await cli(dir, ['project', 'apply', 'one', 'impact=X'], env)).err, /must be one of "LBI", "MBI", "HBI"/);
   assert.equal(hits.get('/schemas/definitions.json'), 1);
 });
 
@@ -205,8 +205,8 @@ test('a schema split over local files is followed with no network at all', async
   write(dir, 'project.schema.json', JSON.stringify({ ...project, properties: { projects: { type: 'object', additionalProperties: { $ref: 'defs/definitions.json#/project' } } } }));
   write(dir, 'defs/definitions.json', JSON.stringify(definitions));
   write(dir, 'project.yaml', '# yaml-language-server: $schema=project.schema.json\nprojects: {}\n');
-  assert.equal((await cli(dir, ['project', 'set', 'one', 'name=One'], env)).code, 0);
-  assert.match((await cli(dir, ['project', 'set', 'one', 'impact=X'], env)).err, /must be one of "LBI", "MBI", "HBI"/);
+  assert.equal((await cli(dir, ['project', 'apply', 'one', 'name=One'], env)).code, 0);
+  assert.match((await cli(dir, ['project', 'apply', 'one', 'impact=X'], env)).err, /must be one of "LBI", "MBI", "HBI"/);
   assert.match((await cli(dir, ['project', 'explain', 'name'], env)).out, /Display name, from the second document\./);
   assert.equal(existsSync(env.YAMLCTL_CACHE_DIR), false);
 });
@@ -215,7 +215,7 @@ test('a relative $ref resolves against the document $id, as the specification sa
   served.set('/published/project.json', { ...project, $id: `${base}/canonical/project.json` });
   served.set('/canonical/definitions.json', definitions);
   const { dir, env } = remoteWorkspace('/published/project.json');
-  const result = await cli(dir, ['project', 'set', 'two', 'name=Two'], env);
+  const result = await cli(dir, ['project', 'apply', 'two', 'name=Two'], env);
   assert.equal(result.code, 0, result.err);
   assert.equal(hits.get('/canonical/definitions.json'), 1);
   assert.equal(hits.get('/published/definitions.json'), undefined);

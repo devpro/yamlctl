@@ -52,7 +52,7 @@ test('a reference to an entry that exists and satisfies the target rule passes',
 });
 
 test('a reference to an entry that does not exist is refused', () => {
-  assert.deepEqual(checkSet({ schema, data: data(), map: 'nodes', key: 'new', entry: { parent: 'nowhere' } }), ['parent: nowhere is not an entry of nodes, set it first']);
+  assert.deepEqual(checkSet({ schema, data: data(), map: 'nodes', key: 'new', entry: { parent: 'nowhere' } }), ['parent: nowhere is not an entry of nodes, create it first']);
 });
 
 test('an entry naming itself is refused', () => {
@@ -71,7 +71,7 @@ test('a reference inherited from the defaults is checked like one set on the ent
 });
 
 test('a reference into another map checks every name in a list', () => {
-  assert.deepEqual(checkSet({ schema, data: data(), map: 'links', key: 'l2', entry: { targets: ['leaf', 'ghost'] } }), ['targets: ghost is not an entry of nodes, set it first']);
+  assert.deepEqual(checkSet({ schema, data: data(), map: 'links', key: 'l2', entry: { targets: ['leaf', 'ghost'] } }), ['targets: ghost is not an entry of nodes, create it first']);
 });
 
 test('changing an immutable value on an existing entry needs force, and says why', () => {
@@ -109,6 +109,6 @@ test('a file edited by hand is checked entry by entry, immutability aside', () =
   const d = data();
   d.nodes.orphan = { parent: 'gone' };
   d.links.l2 = { targets: ['file', 'ghost'] };
-  assert.deepEqual(checkAll({ schema, data: d }), ['nodes/orphan: parent: gone is not an entry of nodes, set it first', 'links/l2: targets: ghost is not an entry of nodes, set it first']);
+  assert.deepEqual(checkAll({ schema, data: d }), ['nodes/orphan: parent: gone is not an entry of nodes, create it first', 'links/l2: targets: ghost is not an entry of nodes, create it first']);
   assert.deepEqual(checkAll({ schema, data: data() }), []);
 });

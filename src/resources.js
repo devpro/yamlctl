@@ -64,7 +64,7 @@ export function resolveResource({ dir, name, file = null }) {
 
   const files = dataFiles(dir);
   const byStem = files.filter((path) => stem(path) === name);
-  if (byStem.length > 1) throw new Error(`${byStem.map((path) => basename(path)).join(' and ')} both exist, name one with -f`);
+  if (byStem.length > 1) throw new Error(`${byStem.map((path) => basename(path)).join(' and ')} both exist, name one with --data-file`);
   if (byStem.length === 1) return single(openFile(byStem[0]));
 
   const holding = [];
@@ -73,7 +73,7 @@ export function resolveResource({ dir, name, file = null }) {
     if (opened.maps.includes(name)) holding.push({ ...opened, map: name });
   }
   if (holding.length === 1) return holding[0];
-  if (holding.length > 1) throw new Error(`${holding.map((h) => basename(h.file)).join(' and ')} both hold a map ${name}, name one with -f`);
+  if (holding.length > 1) throw new Error(`${holding.map((h) => basename(h.file)).join(' and ')} both hold a map ${name}, name one with --data-file`);
   const known = listResources(dir).map((resource) => resource.name);
   throw new Error(`no resource ${name} in ${dir}${known.length ? `, the resources are ${known.join(', ')}` : ', which holds no YAML data file'}`);
 }

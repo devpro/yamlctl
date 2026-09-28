@@ -30,6 +30,15 @@ test('an entry set keeps every other entry, the comments and the order', () => {
   assert.ok(text.indexOf('platform:') < text.indexOf('checkout:') && text.indexOf('checkout:') < text.indexOf('billing:'));
 });
 
+test('an entry changed keeps the comments inside it and the order of its fields', () => {
+  const dir = emptyDir();
+  write(dir, 'a.yaml', 'items:\n  one:\n    # before a\n    a: 1 # after a\n    b: 2\n    nested:\n      # before x\n      x: 1\n      y: 2\n');
+  const document = readDocument(join(dir, 'a.yaml'));
+  setEntry(document, 'items', 'one', { c: 3, a: 5, nested: { x: 1, y: 3 } });
+  writeDocument(document);
+  assert.equal(read(dir, 'a.yaml'), 'items:\n  one:\n    # before a\n    a: 5 # after a\n    nested:\n      # before x\n      x: 1\n      y: 3\n    c: 3\n');
+});
+
 test('a new string value is double quoted, so it reads back as the same string', () => {
   const dir = workspace();
   const document = readDocument(join(dir, 'project.yaml'));
