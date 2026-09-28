@@ -75,12 +75,12 @@ test('oneOf with a null branch unwraps like anyOf', () => {
 
 test('an anyOf with two real branches is left as it is', () => {
   const schema = new Schema({ properties: { a: { anyOf: [{ type: 'string' }, { type: 'number' }] } } });
-  assert.equal(schema.unwrap('#/properties/a').pointer, 'urn:yamlctl:inline#/properties/a');
+  assert.equal(schema.unwrap('#/properties/a').pointer, 'yamlctl:/inline#/properties/a');
 });
 
 test('a chain of references is followed to its end', () => {
   const schema = new Schema({ definitions: { a: { $ref: '#/definitions/b' }, b: { $ref: '#/definitions/c' }, c: { type: 'string' } }, properties: { x: { $ref: '#/definitions/a' } } });
-  assert.equal(schema.unwrap('#/properties/x').pointer, 'urn:yamlctl:inline#/definitions/c');
+  assert.equal(schema.unwrap('#/properties/x').pointer, 'yamlctl:/inline#/definitions/c');
 });
 
 test('a reference to itself stops instead of looping', () => {
@@ -99,6 +99,7 @@ test('a reference to a file that does not exist names it', () => {
 
 test('a relative reference in a schema built in memory names what it could not load', () => {
   const schema = new Schema({ properties: { a: { $ref: 'other.json#/x' } } });
+  assert.deepEqual(schema.missing, ['yamlctl:/other.json']);
   assert.throws(() => schema.unwrap('#/properties/a'), /other\.json is referenced by the schema and could not be loaded/);
 });
 
@@ -108,7 +109,7 @@ test('an anchor is not followed, and says so', () => {
 });
 
 test('a pointer to nothing names what is missing', () => {
-  assert.throws(() => new Schema({}).at('#/definitions/none'), /urn:yamlctl:inline has nothing at #\/definitions\/none/);
+  assert.throws(() => new Schema({}).at('#/definitions/none'), /yamlctl:\/inline has nothing at #\/definitions\/none/);
 });
 
 test('an entry map is found from its shape, and the defaults beside it are not one', () => {

@@ -63,8 +63,9 @@ function pointerKeys(fragment, pointer) {
 const isNull = (schema) => schema?.type === 'null' || (Array.isArray(schema?.type) && schema.type.length === 1 && schema.type[0] === 'null');
 
 export class Schema {
-  // `uri` defaults to an address of its own for a schema built in memory, which resolves a fragment reference and nothing else.
-  constructor(root, uri = 'urn:yamlctl:inline') {
+  // `uri` defaults to an address of its own for a schema built in memory.
+  // It has a path, unlike a `urn:`, since a URL parser following the WHATWG standard refuses to resolve a relative reference against an opaque one, and the reference would then be dropped rather than reported as missing.
+  constructor(root, uri = 'yamlctl:/inline') {
     this.root = root;
     this.uri = uri;
     this.path = displayUri(uri);
