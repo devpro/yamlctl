@@ -3,14 +3,13 @@
 [![CI](https://github.com/devpro/yamlctl/actions/workflows/ci.yml/badge.svg)](https://github.com/devpro/yamlctl/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/yamlctl)](https://www.npmjs.com/package/yamlctl)
 
-`yamlctl` reads and edits YAML data files entry by entry, and checks every change against the file's JSON Schema before writing it.
+Edit YAML files from the command line.
 
-It is made for YAML files that are data rather than code, a list of projects, servers or rules, kept in git and read by Terraform, Ansible or anything else,
-and updated by a pipeline from another system: a CMDB, a service catalog, a spreadsheet export.
+## Key
 
 - **Kubectl-like**: `yamlctl project list`, `yamlctl project get checkout_api`, `yamlctl project set checkout_api name="Checkout API"`.
 - **Checked**: a field that does not exist, a value outside its allowed list, or a reference to a missing entry is refused, and the file is left as it was.
-- **Typed by the schema**: `005217217997` stays a string where the schema says string, where a plain YAML write would turn it into a number.
+- **Typed by the schema**: a string stays a file even if it looks like a number.
 - **Careful with the file**: comments, order and every entry not named stay exactly as they were, and a command changing nothing writes nothing.
 - **Nothing to configure**: the schema is the one the file already names for an editor.
 

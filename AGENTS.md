@@ -6,12 +6,12 @@ It knows nothing about what a file describes: every rule comes from the schema, 
 ```txt
 bin/yamlctl.js    the entry point, nothing but the exit status
 src/cli.js        the grammar, `yamlctl <resource> <verb>`, and every command
-src/resources.js  what a resource name points at: a file and a map of entries in it
-src/schema.js     finding, reading and applying a schema, and typing a value from it
-src/store.js      every schema document by URI, fetching and caching the remote ones
-src/rules.js      the x-yamlctl checks spanning more than one entry
 src/document.js   reading and writing a YAML file without disturbing what is not edited
 src/explain.js    the schema read back as text
+src/resources.js  what a resource name points at: a file and a map of entries in it
+src/rules.js      the x-yamlctl checks spanning more than one entry
+src/schema.js     finding, reading and applying a schema, and typing a value from it
+src/store.js      every schema document by URI, fetching and caching the remote ones
 ```
 
 Node.js 20 or later, plain JavaScript as ES modules, no build step.
@@ -21,9 +21,8 @@ Two dependencies, `yaml` for editing a document in place and `ajv` for validatio
 
 - Do the work directly, in the foreground.
   No subagents, forks or background tasks unless one is absolutely needed, and ask first even then.
-- Linters are never run by an agent, and never imitated by hand either: no `markdownlint`, `yamllint`, `eslint`, no formatter, no rewrapping a paragraph so a tool would be quieter.
+- Linters for YAML and Markdown are never run by an agent: no `markdownlint`, `yamllint`, no rewrapping a paragraph so a tool would be quieter.
   The repository owner runs them and decides about every finding.
-  Test commands are not linters.
 - Preserve existing comments and formatting when editing a file.
 - Commit only when asked, and never push.
   Shell scripts are `snake_case` and committed with the executable bit (`git update-index --chmod=+x`).
@@ -39,8 +38,10 @@ Applies to Markdown, code comments, commit messages, command output and prose in
 - **One thought per line.**
   Every sentence starts on its own line; a long sentence breaks at a clause boundary, never mid-clause and never to fit a width.
   There is no maximum line length.
-- **No em dash, no en dash.** A colon, a comma, or a full stop.
-- **No second person.** "The working tree", not "your working tree"; `<token>`, not `<your-token>`.
+- **No em dash, no en dash.**
+  A colon, a comma, or a full stop.
+- **No second person.**
+  "The working tree", not "your working tree"; `<token>`, not `<your-token>`.
 
 ## Design decisions
 
@@ -64,7 +65,8 @@ Applies to Markdown, code comments, commit messages, command output and prose in
 ## Testing
 
 `npm test` runs `node --test test/*.test.js`, `node:test` and `node:assert/strict`, one file per module.
-`src/cli.js` exports `run`, which takes its output functions, so a command is tested in process against a copy of `test/fixtures/workspace`; `test/cli.test.js` also runs the real binary for the shebang and the exit status.
+`src/cli.js` exports `run`, which takes its output functions, so a command is tested in process against a copy of `test/fixtures/workspace`;
+`test/cli.test.js` also runs the real binary for the shebang and the exit status.
 `test/remote.test.js` serves schemas from a real local HTTP server and counts the requests, which is what proves the cache, `--offline` and the fallback rather than a stubbed fetch.
 `npm run smoke` packs the tarball, installs it in an empty project and runs it, which is what catches a file left out of `files` or a missing dependency.
 
