@@ -1,0 +1,4 @@
+title: Automate
+layout:
+  - type: terminal
+  - type: editor

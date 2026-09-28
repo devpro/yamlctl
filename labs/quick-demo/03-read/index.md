@@ -1,0 +1,48 @@
+# Read
+
+## Step 1 - Discover
+
+1. List the resources of the directory
+
+   <!-- verify: expect="schemas/project.schema.json" -->
+
+   ```bash exec
+   yamlctl resources
+   ```
+
+2. List the projects
+
+   <!-- verify: expect="Checkout API" -->
+
+   ```bash exec
+   yamlctl project list
+   ```
+
+3. Get one project
+
+   <!-- verify: expect="business_impact: HBI" -->
+
+   ```bash exec
+   yamlctl project get checkout_api
+   ```
+
+## Step 2 - Explain
+
+1. List the fields a project holds
+
+   <!-- verify: expect="<[]object>" -->
+
+   ```bash exec
+   yamlctl project explain
+   ```
+
+2. Show the values one field allows
+
+   <!-- verify: expect="VALUES:" -->
+
+   ```bash exec
+   yamlctl project explain risk_profile.business_impact
+   ```
+
+   > [!TIP]
+   > Everything shown is read from the schema, the way `kubectl explain` reads an API.

@@ -1,0 +1,4 @@
+title: Read
+layout:
+  - type: terminal
+  - type: editor
