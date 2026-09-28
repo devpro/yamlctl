@@ -1,0 +1,12 @@
+version: '3'
+
+tasks:
+
+  default:
+    cmds:
+      - task --list
+
+  dev:bump:
+    desc: Bump the patch version in package.json and package-lock.json
+    cmds:
+      - npm version patch --no-git-tag-version

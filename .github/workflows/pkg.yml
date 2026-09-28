@@ -1,0 +1,66 @@
+name: PKG
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+# purpose: Continuous Delivery (aka Packaging & Shipping)
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch: {}
+
+concurrency:
+  group: "${{ github.ref }}-pkg"
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  npm-publication:
+    name: "Package yamlctl"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # npm trusted publishing: the package is published with a short-lived OIDC token rather than a stored secret
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          # writes the .npmrc that npm publish reads,
+          # so the OIDC exchange knows which registry to present the token to
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test
+
+      # npmjs.org refuses to publish over an existing version, so a push that did not bump package.json is skipped rather than failed.
+      - name: Check whether this version is already published
+        id: registry
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if published=$(npm view yamlctl version 2>"$RUNNER_TEMP/npm-view.err"); then
+            :
+          elif grep -q E404 "$RUNNER_TEMP/npm-view.err"; then
+            published=
+          else
+            cat "$RUNNER_TEMP/npm-view.err" >&2
+            exit 1
+          fi
+          echo "yamlctl is $version in package.json and ${published:-absent} on npmjs.org"
+          if [ "$version" = "$published" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish NPM package
+        if: steps.registry.outputs.publish == 'true'
+        run: npm publish
