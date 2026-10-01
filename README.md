@@ -135,19 +135,19 @@ yamlctl check                                        every file in the directory
 
 The verbs writing an entry follow kubectl:
 
-Verb      | Entry missing | Entry present                       | Input
-----------|---------------|-------------------------------------|---------------------------------
-`create`  | created       | refused                             | `<field>=<value>...` or `-f`
-`apply`   | created       | configured, or unchanged            | `<field>=<value>...` or `-f`
-`patch`   | refused       | patched, or patched (no change)     | `<field>=<value>...`
-`replace` | refused       | replaced, or replaced (no change)   | `-f`
-`delete`  | refused, or nothing with `--ignore-not-found` | deleted | `<key>...` or `-f`
+Verb      | Entry missing                                 | Entry present                     | Input
+----------|-----------------------------------------------|-----------------------------------|-----------------------------
+`create`  | created                                       | refused                           | `<field>=<value>...` or `-f`
+`apply`   | created                                       | configured, or unchanged          | `<field>=<value>...` or `-f`
+`patch`   | refused                                       | patched, or patched (no change)   | `<field>=<value>...`
+`replace` | refused                                       | replaced, or replaced (no change) | `-f`
+`delete`  | refused, or nothing with `--ignore-not-found` | deleted                           | `<key>...` or `-f`
 
 Whatever the verb, an entry holding what it already held is not written.
 A command writing several entries checks them all against the file as it will be, so one may name another written alongside it, and writes the file once, or not at all when one of them fails.
 
 Option                  | Action
-------------------------|------------------------------------------------------------------------------------------
+------------------------|-------------------------------------------------------------------------------------------------
 `-C, --dir <dir>`       | the directory holding the data files, the current one by default
 `--data-file <file>`    | the data file, for a resource the directory does not name on its own
 `-o, --output <format>` | `yaml`, `json` or `name`: the entries, or their resource paths, instead of a table or a sentence
