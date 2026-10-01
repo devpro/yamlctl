@@ -21,7 +21,7 @@ permissions:
 jobs:
   markup-lint:
     name: Markup
-    uses: devpro/github-workflow-parts/.github/workflows/reusable-markup-lint.yml@58dbfe0e9927f2191796ac616a4bb43126e59d98
+    uses: devpro/github-workflow-parts/.github/workflows/reusable-markup-lint.yml@35750e9d1a21724d3a7e028ee9bc6da02dcb5afb
 
   test:
     name: "Test on Node.js ${{ matrix.node-version }}"

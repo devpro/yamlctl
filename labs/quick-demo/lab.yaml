@@ -1,0 +1,14 @@
+title: "yamlctl quick demo"
+description: "Read and edit YAML data files entry by entry, every change checked against their JSON Schema"
+duration: 15
+tags:
+  - yaml
+  - json-schema
+  - yamlctl
+sidebarWidth: 620
+backend: container
+workdir: ~/yamlctl-lab
+env:
+  # https://github.com/nvm-sh/nvm/releases
+  NVM_VERSION: v0.40.7
+  NODE_MAJOR: 24

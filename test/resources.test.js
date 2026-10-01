@@ -21,7 +21,7 @@ test('a resource named after a .yml file is found the same way', () => {
 test('both project.yaml and project.yml is refused, naming -f', () => {
   const dir = workspace();
   write(dir, 'project.yml', 'projects: {}\n');
-  assert.throws(() => resolveResource({ dir, name: 'project' }), /project\.yaml and project\.yml both exist, name one with -f/);
+  assert.throws(() => resolveResource({ dir, name: 'project' }), /project\.yaml and project\.yml both exist, name one with --data-file/);
 });
 
 test('a map name is found in whichever file holds it', () => {

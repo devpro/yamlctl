@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=schemas/project.schema.json
+# Projects, one entry per application.
+projects_defaults:
+  archived: false
+projects:
+  applications:
+    name: "Applications"
+    is_folder: true
+  checkout_api:
+    name: "Checkout API"
+    # owned by the payments team
+    parent_project: "applications"
+    risk_profile:
+      business_impact: "HBI"
+    account_links:
+      - account: "123456789012"
+        environment: "PRODUCTION"

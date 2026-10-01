@@ -1,0 +1,4 @@
+title: Setup
+layout:
+  - type: terminal
+  - type: editor

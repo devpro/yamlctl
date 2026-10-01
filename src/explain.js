@@ -1,5 +1,5 @@
 // `yamlctl <resource> explain [field]`, the schema read back as text, the way `kubectl explain` reads an API.
-// It is what someone writing a pipeline needs before the first `set`: which fields exist, what each holds, and which values it takes.
+// It is what someone writing a pipeline needs before the first `create`: which fields exist, what each holds, and which values it takes.
 import { EXTENSION, escapeKey, types } from './schema.js';
 
 export function explain(schema, map, segments) {

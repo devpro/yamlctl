@@ -27,9 +27,9 @@ version=$("$yamlctl" --version) || fail 'yamlctl --version failed'
 mkdir -p data/schemas
 cp "$here/examples/project.yaml" data/
 cp "$here/examples/schemas/project.schema.json" data/schemas/
-"$yamlctl" -C data project set smoke_app name="Smoke App" parent_project=applications account=005217217997 >/dev/null || fail 'set failed'
+"$yamlctl" -C data project create smoke_app name="Smoke App" parent_project=applications account=005217217997 >/dev/null || fail 'create failed'
 grep -q 'account: "005217217997"' data/project.yaml || fail 'the account number lost its leading zero'
-if "$yamlctl" -C data project set smoke_app risk_profile.business_impact=HIGH 2>/dev/null; then fail 'a value outside the enum was accepted'; fi
+if "$yamlctl" -C data project patch smoke_app risk_profile.business_impact=HIGH 2>/dev/null; then fail 'a value outside the enum was accepted'; fi
 "$yamlctl" -C data check >/dev/null || fail 'check failed on a valid file'
 
 echo "smoke: yamlctl $version installs and runs"

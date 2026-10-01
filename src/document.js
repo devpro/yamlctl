@@ -1,6 +1,6 @@
 // A YAML data file read and written in place, so the entries yamlctl does not touch, the comments and the order of the file come back exactly as they were.
 import { readFileSync, writeFileSync } from 'node:fs';
-import { parseDocument } from 'yaml';
+import { isMap, parseDocument } from 'yaml';
 
 export function readDocument(file) {
   let text;
@@ -31,11 +31,40 @@ export function writeDocument(document) {
 }
 
 export function setEntry(document, map, key, entry) {
+  const { doc } = document;
   // An empty map is usually written `{}`, and an entry added to it would stay on that one line, so the map becomes a block first.
-  const node = document.doc.get(map, true);
+  const node = doc.get(map, true);
   if (node && typeof node === 'object' && 'flow' in node) node.flow = false;
-  if (!node || node.items === undefined) document.doc.set(map, document.doc.createNode({}));
-  document.doc.setIn([map, key], document.doc.createNode(entry));
+  if (!node || node.items === undefined) doc.set(map, doc.createNode({}));
+  const current = doc.getIn([map, key], true);
+  if (isMap(current)) update(doc, current, entry);
+  else doc.setIn([map, key], doc.createNode(entry));
+}
+
+const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+// An entry already in the file is changed field by field rather than rebuilt, since a node built anew carries none of the comments written inside the old one.
+// A field keeps its place, a new one goes last, and a value replaced keeps the comments written before and after it.
+function update(doc, node, value) {
+  for (const pair of [...node.items]) {
+    const key = pair.key?.value ?? pair.key;
+    if (!Object.hasOwn(value, key)) node.delete(key);
+  }
+  for (const [key, next] of Object.entries(value)) {
+    const child = node.get(key, true);
+    if (isMap(child) && isObject(next)) {
+      update(doc, child, next);
+      continue;
+    }
+    if (child && typeof child.toJSON === 'function' && JSON.stringify(child.toJSON()) === JSON.stringify(next)) continue;
+    const fresh = doc.createNode(next);
+    if (child && typeof child === 'object') {
+      fresh.commentBefore = child.commentBefore;
+      fresh.comment = child.comment;
+      fresh.spaceBefore = child.spaceBefore;
+    }
+    node.set(key, fresh);
+  }
 }
 
 export function deleteEntry(document, map, key) {

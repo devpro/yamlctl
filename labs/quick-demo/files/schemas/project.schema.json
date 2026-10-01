@@ -1,0 +1,60 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "project.yaml",
+  "description": "Projects, and the defaults every project takes.",
+  "type": "object",
+  "properties": {
+    "projects": {
+      "description": "Projects, keyed by a stable name: the key identifies the project, so it never changes.",
+      "type": ["object", "null"],
+      "additionalProperties": { "$ref": "#/definitions/project" },
+      "x-yamlctl": { "defaults": "projects_defaults", "title": "name" }
+    },
+    "projects_defaults": {
+      "description": "Values every project takes unless it sets its own.",
+      "anyOf": [{ "$ref": "#/definitions/project" }, { "type": "null" }]
+    }
+  },
+  "required": ["projects", "projects_defaults"],
+  "additionalProperties": false,
+  "definitions": {
+    "project": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "name": { "description": "Display name.", "type": ["string", "null"] },
+        "description": { "type": ["string", "null"] },
+        "archived": { "description": "An archived project is kept but no longer active.", "type": ["boolean", "null"] },
+        "is_folder": { "description": "A folder holds other projects rather than resources.", "type": ["boolean", "null"] },
+        "parent_project": {
+          "description": "Key of the folder holding this project.",
+          "type": ["string", "null"],
+          "x-yamlctl": { "key-of": ".", "target-must": { "is_folder": true }, "immutable": "moving a project recreates it" }
+        },
+        "account": { "description": "Cloud account number, kept as text so a leading zero survives.", "type": ["string", "null"] },
+        "risk_profile": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "properties": {
+            "business_impact": { "description": "How much the business depends on the project.", "enum": ["LBI", "MBI", "HBI", null] },
+            "regulatory_standards": { "type": ["array", "null"], "items": { "enum": ["ISO_27001", "SOC", "GDPR", "PCI_DSS"] } }
+          }
+        },
+        "account_links": {
+          "description": "Cloud accounts whose resources belong to the project.",
+          "type": ["array", "null"],
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["account"],
+            "properties": {
+              "account": { "description": "Account number or name.", "type": "string" },
+              "environment": { "enum": ["PRODUCTION", "STAGING", "DEVELOPMENT"] }
+            }
+          }
+        },
+        "tags": { "description": "Free-form labels.", "type": ["object", "null"], "additionalProperties": { "type": "string" } }
+      }
+    }
+  }
+}

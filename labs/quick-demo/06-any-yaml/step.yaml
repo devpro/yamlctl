@@ -1,0 +1,4 @@
+title: Any YAML file
+layout:
+  - type: terminal
+  - type: editor
