@@ -28,13 +28,16 @@ projects:
 These rules go on the property that holds the entries, here `projects`, next to its `additionalProperties`:
 
 ```json
-"x-yamlctl": { "defaults": "projects_defaults", "title": "name" }
+"x-yamlctl": { "defaults": "projects_defaults", "title": "name", "singular": "project" }
 ```
 
 - `defaults` names the property holding default values.
   When an entry leaves a field out, the value is read from there, so `billing` is treated as `is_folder: false`.
 - `title` is the field that `yamlctl projects list` shows beside each key.
   It is `name` when not set.
+- `singular` is a second name the command line accepts for the map, so `yamlctl project list` reads `projects` as `yamlctl projects list` does.
+  Everything printed still names the map, `projects/billing created`, so the singular is a shortcut to type rather than a second name to read.
+  It is never derived from the map's name, since English plurals do not reverse reliably, and a map declaring none is reached by its own name alone.
 
 A property is treated as a map of entries when its `additionalProperties` is an object schema, as `projects` is.
 When such a property holds something else, settings grouped by environment for instance, `"x-yamlctl": { "entries": false }` on it tells `yamlctl` to leave it alone.

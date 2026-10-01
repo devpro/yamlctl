@@ -4,24 +4,42 @@ import { join } from 'node:path';
 import { dataFiles, listResources, openFile, resolveResource } from '../src/resources.js';
 import { emptyDir, workspace, write } from './helpers.js';
 
-test('a resource named after a .yaml file is that file and its one map', () => {
+test('a resource is a map, found in the file holding it', () => {
   const dir = workspace();
-  const target = resolveResource({ dir, name: 'project' });
+  const target = resolveResource({ dir, name: 'projects' });
   assert.equal(target.file, join(dir, 'project.yaml'));
   assert.equal(target.map, 'projects');
 });
 
-test('a resource named after a .yml file is found the same way', () => {
+test('a map in a .yml file is found the same way', () => {
   const dir = workspace();
   const target = resolveResource({ dir, name: 'servers' });
   assert.equal(target.file, join(dir, 'servers.yml'));
   assert.equal(target.map, 'servers');
 });
 
-test('both project.yaml and project.yml is refused, naming -f', () => {
+test('the singular a map declares names the same resource', () => {
+  const dir = workspace();
+  const target = resolveResource({ dir, name: 'project' });
+  assert.equal(target.file, join(dir, 'project.yaml'));
+  assert.equal(target.map, 'projects');
+  assert.equal(resolveResource({ dir, name: 'project', file: join(dir, 'project.yaml') }).map, 'projects');
+});
+
+test('a singular no schema declares is not guessed', () => {
+  assert.throws(() => resolveResource({ dir: workspace(), name: 'scan_policy' }), /no resource scan_policy in /);
+  assert.throws(() => resolveResource({ dir: workspace(), name: 'server' }), /no resource server in /);
+});
+
+test('a file name is refused, naming the maps it holds', () => {
+  const dir = workspace();
+  assert.throws(() => resolveResource({ dir, name: 'policy.yaml' }), /policy\.yaml is a file rather than a resource, use yamlctl ignore_rules \.\.\., yamlctl scan_policies \.\.\./);
+});
+
+test('a map two files hold under one stem is refused, naming --data-file', () => {
   const dir = workspace();
   write(dir, 'project.yml', 'projects: {}\n');
-  assert.throws(() => resolveResource({ dir, name: 'project' }), /project\.yaml and project\.yml both exist, name one with --data-file/);
+  assert.throws(() => resolveResource({ dir, name: 'projects' }), /project\.yaml and project\.yml both hold a map projects, name one with --data-file/);
 });
 
 test('a map name is found in whichever file holds it', () => {
@@ -31,12 +49,6 @@ test('a map name is found in whichever file holds it', () => {
   assert.equal(target.map, 'scan_policies');
 });
 
-test('a file holding several maps resolves with no map, and its maps listed', () => {
-  const target = resolveResource({ dir: workspace(), name: 'policy' });
-  assert.equal(target.map, null);
-  assert.deepEqual(target.maps, ['ignore_rules', 'scan_policies']);
-});
-
 test('a map two files hold is refused, naming both', () => {
   const dir = workspace();
   write(dir, 'more.yaml', 'scan_policies:\n  other:\n    name: x\n');
@@ -44,18 +56,17 @@ test('a map two files hold is refused, naming both', () => {
 });
 
 test('an unknown name lists the resources that exist', () => {
-  assert.throws(() => resolveResource({ dir: workspace(), name: 'nothing' }), /no resource nothing in .*, the resources are ignore_rules, scan_policies, project, servers/);
+  assert.throws(() => resolveResource({ dir: workspace(), name: 'nothing' }), /no resource nothing in .*, the resources are ignore_rules, scan_policies, projects, servers/);
 });
 
 test('an unknown name in a directory with no data file says so', () => {
   assert.throws(() => resolveResource({ dir: emptyDir(), name: 'x' }), /which holds no YAML data file/);
 });
 
-test('-f names the file, and the resource is its name or one of its maps', () => {
+test('--data-file names the file, and the resource is one of its maps', () => {
   const dir = workspace();
   const file = join(dir, 'policy.yaml');
-  assert.equal(resolveResource({ dir, name: 'policy', file }).map, null);
-  assert.equal(resolveResource({ dir, name: 'policy.yaml', file }).map, null);
+  assert.throws(() => resolveResource({ dir, name: 'policy', file }), /policy\.yaml holds no map policy/);
   assert.equal(resolveResource({ dir, name: 'ignore_rules', file }).map, 'ignore_rules');
   assert.throws(() => resolveResource({ dir, name: 'rules', file }), /policy\.yaml holds no map rules, only ignore_rules, scan_policies/);
 });
@@ -105,24 +116,26 @@ test('a remote schema nothing fetched is reported rather than read from the netw
 
 test('every resource is listed with its file, map, entry count and schema', () => {
   const dir = workspace();
-  const rows = listResources(dir).map(({ name, map, entries, schema }) => [name, map, entries, schema && schema.slice(dir.length + 1)]);
+  const rows = listResources(dir).map(({ name, singular, file, entries, schema }) => [name, singular, file.slice(dir.length + 1), entries, schema && schema.slice(dir.length + 1)]);
   assert.deepEqual(rows, [
-    ['ignore_rules', 'ignore_rules', 1, 'schemas/policy.schema.json'],
-    ['scan_policies', 'scan_policies', 1, 'schemas/policy.schema.json'],
-    ['project', 'projects', 2, 'schemas/project.schema.json'],
-    ['servers', 'servers', 2, null],
+    ['ignore_rules', null, 'policy.yaml', 1, 'schemas/policy.schema.json'],
+    ['scan_policies', null, 'policy.yaml', 1, 'schemas/policy.schema.json'],
+    ['projects', 'project', 'project.yaml', 2, 'schemas/project.schema.json'],
+    ['servers', null, 'servers.yml', 2, null],
   ]);
 });
 
 test('a file that cannot be read is listed with its error rather than hiding the others', () => {
   const dir = workspace();
   write(dir, 'broken.yaml', 'a: [\n');
-  const broken = listResources(dir).find((row) => row.name === 'broken');
+  const broken = listResources(dir).find((row) => row.file.endsWith('broken.yaml'));
+  assert.equal(broken.name, null);
   assert.match(broken.error, /not valid YAML/);
 });
 
-test('a file holding no map of entries is still listed', () => {
+test('a file holding no map of entries holds no resource', () => {
   const dir = emptyDir();
   write(dir, 'settings.yaml', 'debug: true\n');
-  assert.deepEqual(listResources(dir).map(({ name, map, entries }) => [name, map, entries]), [['settings', null, 0]]);
+  assert.deepEqual(listResources(dir), []);
+  assert.throws(() => resolveResource({ dir, name: 'settings' }), /settings\.yaml is a file rather than a resource, and holds no map of entries/);
 });

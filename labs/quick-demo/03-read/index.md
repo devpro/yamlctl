@@ -15,7 +15,7 @@
    <!-- verify: expect="Checkout API" -->
 
    ```bash exec
-   yamlctl project list
+   yamlctl projects list
    ```
 
 3. Get one project
@@ -23,8 +23,19 @@
    <!-- verify: expect="business_impact: HBI" -->
 
    ```bash exec
+   yamlctl projects get checkout_api
+   ```
+
+4. Get it by the singular
+
+   <!-- verify: expect="business_impact: HBI" -->
+
+   ```bash exec
    yamlctl project get checkout_api
    ```
+
+   > [!NOTE]
+   > A resource is the map, `projects:`, and the schema declares `"singular": "project"` on it, so both names reach it, as kubectl reaches `pods` as `pod`.
 
 ## Step 2 - Explain
 
@@ -33,7 +44,7 @@
    <!-- verify: expect="<[]object>" -->
 
    ```bash exec
-   yamlctl project explain
+   yamlctl projects explain
    ```
 
 2. Show the values one field allows
@@ -41,7 +52,7 @@
    <!-- verify: expect="VALUES:" -->
 
    ```bash exec
-   yamlctl project explain risk_profile.business_impact
+   yamlctl projects explain risk_profile.business_impact
    ```
 
    > [!TIP]

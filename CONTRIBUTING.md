@@ -17,7 +17,8 @@ node bin/yamlctl.js --help
 Run examples:
 
 ```bash
-cd examples && node ../bin/yamlctl.js project list
+cd examples &&
+node ../bin/yamlctl.js project list
 ```
 
 > [!TIP]

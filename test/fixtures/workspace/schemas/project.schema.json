@@ -7,7 +7,7 @@
       "description": "Projects, keyed by a stable name.",
       "type": ["object", "null"],
       "additionalProperties": { "$ref": "#/definitions/project" },
-      "x-yamlctl": { "defaults": "projects_defaults", "title": "name" }
+      "x-yamlctl": { "defaults": "projects_defaults", "title": "name", "singular": "project" }
     },
     "projects_defaults": {
       "description": "Values every project takes unless it sets its own.",

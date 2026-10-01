@@ -7,7 +7,7 @@ Edit YAML files from the command line.
 
 ## Key
 
-- **Kubectl-like**: the verbs are kubectl's and behave like them, `create`, `apply`, `patch`, `replace`, `delete`, with the resource first, `yamlctl project create checkout_api name="Checkout API"`.
+- **Kubectl-like**: the verbs are kubectl's and behave like them, `create`, `apply`, `patch`, `replace`, `delete`, with the resource first, `yamlctl projects create checkout_api name="Checkout API"`.
 - **Checked**: a field that does not exist, a value outside its allowed list, or a reference to a missing entry is refused, and the file is left as it was.
 - **Typed by the schema**: a string stays a file even if it looks like a number.
 - **Careful with the file**: comments, order and every entry not named stay exactly as they were, and a command changing nothing writes nothing.
@@ -45,18 +45,18 @@ projects:
 
 ```text
 $ yamlctl resources
-RESOURCE   FILE           MAP        ENTRIES   SCHEMA
-project    project.yaml   projects   2         schemas/project.schema.json
+RESOURCE   FILE           ENTRIES   SCHEMA
+projects   project.yaml   2         schemas/project.schema.json
 
-$ yamlctl project list
+$ yamlctl projects list
 KEY            NAME
 applications   Applications
 checkout_api   Checkout API
 
-$ yamlctl project create billing_api name="Billing API" parent_project=applications account=005217217997 risk_profile.business_impact=MBI
+$ yamlctl projects create billing_api name="Billing API" parent_project=applications account=005217217997 risk_profile.business_impact=MBI
 projects/billing_api created
 
-$ yamlctl project get billing_api
+$ yamlctl projects get billing_api
 billing_api:
   name: Billing API
   parent_project: applications
@@ -64,14 +64,14 @@ billing_api:
   risk_profile:
     business_impact: MBI
 
-$ yamlctl project apply billing_api name="Billing API"
+$ yamlctl projects apply billing_api name="Billing API"
 projects/billing_api unchanged
 ```
 
 What the entries hold is read from the schema, the way `kubectl explain` reads an API:
 
 ```text
-$ yamlctl project explain
+$ yamlctl projects explain
 RESOURCE:  projects <object>
 
 FIELDS:
@@ -85,7 +85,7 @@ FIELDS:
   account_links   <[]object>  Cloud accounts whose resources belong to the project.
   tags            <object>    Free-form labels.
 
-$ yamlctl project explain risk_profile.business_impact
+$ yamlctl projects explain risk_profile.business_impact
 FIELD:  risk_profile.business_impact <enum>
 
 DESCRIPTION:
@@ -98,19 +98,19 @@ VALUES:
 And what does not fit is refused, with the file untouched and a non-zero exit status, so a pipeline stops on it:
 
 ```text
-$ yamlctl project patch billing_api risk_profle.business_impact=HBI
-error: risk_profle.business_impact: no such field in projects, run yamlctl project explain to list them
+$ yamlctl projects patch billing_api risk_profle.business_impact=HBI
+error: risk_profle.business_impact: no such field in projects, run yamlctl projects explain to list them
 
-$ yamlctl project patch billing_api risk_profile.business_impact=HIGH
+$ yamlctl projects patch billing_api risk_profile.business_impact=HIGH
 projects/billing_api.risk_profile.business_impact: must be one of "LBI", "MBI", "HBI"
 error: projects/billing_api not written
 
-$ yamlctl project patch billing_api parent_project=checkout_api
+$ yamlctl projects patch billing_api parent_project=checkout_api
 projects/billing_api: parent_project: checkout_api must have is_folder: true, it has null
 projects/billing_api: parent_project: changing "applications" to "checkout_api" needs --force, moving a project recreates it
 error: projects/billing_api not written
 
-$ yamlctl project delete applications
+$ yamlctl projects delete applications
 error: projects/applications is still named by projects/checkout_api, projects/billing_api: delete or change them first
 ```
 
@@ -149,7 +149,7 @@ A command writing several entries checks them all against the file as it will be
 Option                  | Action
 ------------------------|-------------------------------------------------------------------------------------------------
 `-C, --dir <dir>`       | the directory holding the data files, the current one by default
-`--data-file <file>`    | the data file, for a resource the directory does not name on its own
+`--data-file <file>`    | the data file, for a map two files hold or a file whose name the directory does not use
 `-o, --output <format>` | `yaml`, `json` or `name`: the entries, or their resource paths, instead of a table or a sentence
 `-f, --filename <file>` | the entries to create, apply, replace or delete, `-` for standard input
 `--force`               | accept a change the schema marks immutable
@@ -160,8 +160,10 @@ Option                  | Action
 `--offline`             | read remote schemas from the cache only, never from the network, also `YAMLCTL_OFFLINE=1`
 `--refresh`             | fetch remote schemas again even when the cache holds a recent copy
 
-A **resource** is a file, `project` for `project.yaml` or `project.yml`, or a map of entries inside one, `ignore_rules` for the `ignore_rules:` map of whichever file holds it.
-A file holding several maps is listed whole by its own name and reached one map at a time by the map's name.
+A **resource** is a map of entries, `projects` for the `projects:` map, found in whichever file holds it.
+It is never a file: `project.yaml` holding `projects:` is reached as `projects`, and `policy.yaml` holding `ignore_rules:` and `cicd_scan_policies:` as each of the two.
+A resource is therefore named the same way whatever else its file holds, and keeps its name when a second map joins the file.
+A map whose schema declares a `singular` is reached by that name too, `yamlctl project list`, as kubectl reaches `pods` as `pod`, while what is printed keeps the map's own name.
 
 A **field** inside an object is a path, `risk_profile.business_impact`.
 A list or an object is written as JSON, `account_links='[{"account": "123", "environment": "PRODUCTION"}]'`, and an empty value, `description=`, removes the field.
@@ -169,9 +171,9 @@ A list or an object is written as JSON, `account_links='[{"account": "123", "env
 A file given with **`-f`** holds entries under their keys, as YAML or JSON, the shape `get` and `list -o yaml` print, so the file itself can be edited and applied back:
 
 ```bash
-yamlctl project list -o yaml > projects.yaml
+yamlctl projects list -o yaml > projects.yaml
 # edit projects.yaml
-yamlctl project apply -f projects.yaml
+yamlctl projects apply -f projects.yaml
 ```
 
 `apply -f` merges each entry into the one already there, the way `kubectl apply` does: an object merges into the object it meets, a list replaces the list it meets, a field the file leaves out is kept, and a field set to `null` is removed.
@@ -225,11 +227,11 @@ Data goes to standard output, warnings and errors to standard error, and any ref
 `-o` turns what a command prints into data rather than a table or a sentence:
 
 ```text
-$ yamlctl project apply -f entries.yaml -o name
+$ yamlctl projects apply -f entries.yaml -o name
 projects/app_1042
 projects/app_7
 
-$ yamlctl project patch app_7 name=Seven -o json
+$ yamlctl projects patch app_7 name=Seven -o json
 {
   "app_7": {
     "name": "Seven",
@@ -259,7 +261,7 @@ A pipeline keeping a data file in step with another system runs four steps, typi
 ```bash
 # apps.json: [{"id": "1042", "name": "Checkout API", "account": "123456789012"}, ...]
 jq 'map({key: "app_\(.id)", value: {name, parent_project: "applications", account_links: [{account, environment: "PRODUCTION"}]}}) | from_entries' apps.json > entries.json
-yamlctl project apply -f entries.json --prune --prefix app_
+yamlctl projects apply -f entries.json --prune --prefix app_
 yamlctl check
 ```
 

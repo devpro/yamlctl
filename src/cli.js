@@ -1,6 +1,6 @@
 // yamlctl <resource> <verb> [key] [field=value...] or -f <file>, and the few verbs that take no resource.
 //
-// The grammar is noun then verb, `yamlctl project list`, so every verb a resource has sits beside the others in the help and a new one lands in the same place.
+// The grammar is noun then verb, `yamlctl projects list`, so every verb a resource has sits beside the others in the help and a new one lands in the same place.
 import { existsSync, readFileSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -32,7 +32,8 @@ Usage:
   yamlctl resources                                    every resource in the directory
   yamlctl check                                        every file in the directory against its schema
 
-A resource is a file, project for project.yaml or project.yml, or a map of entries inside one, found in whichever file holds it.
+A resource is a map of entries, projects for the projects: map, found in whichever file holds it,
+and also reached by the singular its schema declares, project, when it declares one.
 A field inside an object is a path, risk_profile.business_impact, and a list or an object is written as JSON.
 An empty value, description=, removes the field.
 
@@ -46,7 +47,7 @@ A remote schema, and every remote $ref, is fetched and cached for a day in ${cac
 
 Options:
   -C, --dir <dir>         the directory holding the data files (default: the current directory)
-      --data-file <file>  the data file, for a resource the directory does not name on its own
+      --data-file <file>  the data file, for a map two files hold or a file whose name the directory does not use
   -o, --output <fmt>      yaml, json or name, for a pipeline: the entries, or their resource paths, instead of a table or a sentence
   -f, --filename <file>   the entries to create, apply, replace or delete, - for standard input
       --force             accept a change the schema marks immutable
@@ -60,11 +61,11 @@ Options:
   -v, --version           the version
 
 Examples:
-  yamlctl project create checkout_api name="Checkout API" risk_profile.business_impact=HBI
-  yamlctl project patch checkout_api risk_profile.business_impact=MBI
-  yamlctl project get checkout_api -o json
-  yamlctl project list -o yaml > projects.yaml && yamlctl project apply -f projects.yaml
-  yamlctl project explain risk_profile
+  yamlctl projects create checkout_api name="Checkout API" risk_profile.business_impact=HBI
+  yamlctl projects patch checkout_api risk_profile.business_impact=MBI
+  yamlctl projects get checkout_api -o json
+  yamlctl projects list -o yaml > projects.yaml && yamlctl projects apply -f projects.yaml
+  yamlctl projects explain risk_profile
 `;
 
 class UsageError extends Error {}
@@ -79,7 +80,7 @@ const WRITES = {
 };
 const VERBS = 'list, get, create, apply, patch, replace, delete, explain or check';
 
-// Options may come anywhere, before or after the resource, so `yamlctl -C data project list` and `yamlctl project list -C data` read the same.
+// Options may come anywhere, before or after the resource, so `yamlctl -C data projects list` and `yamlctl projects list -C data` read the same.
 export function parseArgs(argv) {
   const options = { dir: '.', dataFile: null, output: null, filename: null, force: false, ignoreNotFound: false, prune: false, all: false, prefix: null, offline: false, refresh: false, help: false, version: false };
   const words = [];
@@ -231,13 +232,6 @@ const display = (path, cwd) => {
   return rel.startsWith('..') ? path : rel || basename(path);
 };
 
-// The one map a verb acting on an entry needs, refused with the names to use when the resource is a file holding several.
-function needMap(target, name) {
-  if (target.map) return target.map;
-  if (!target.maps.length) throw new Error(`${basename(target.file)} holds no map of entries`);
-  throw new Error(`${basename(target.file)} holds several maps, use one as the resource: ${target.maps.map((map) => `yamlctl ${map} ...`).join(', ')}`);
-}
-
 function needKey(args, verb, orFile = false) {
   if (!args[0]) throw new UsageError(`${verb} needs the key of an entry${orFile ? ', or -f <file>' : ''}`);
   return args[0];
@@ -250,44 +244,39 @@ function printData(value, format, out) {
 function resources({ dir, options, out, cwd }) {
   const found = listResources(dir);
   if (options.output === 'name') {
-    for (const r of found) out(`${r.name}\n`);
+    for (const r of found) if (r.name) out(`${r.name}\n`);
     return 0;
   }
   if (options.output) {
     printData(found.map((r) => ({ ...r, file: display(r.file, cwd), schema: r.schema ? display(r.schema, cwd) : null })), options.output, out);
     return 0;
   }
-  const rows = found.map((r) => [r.name, display(r.file, cwd), r.map ?? '-', r.entries ?? '-', r.error ? `error: ${r.error}` : r.schema ? display(r.schema, cwd) : '-']);
-  out(table(['RESOURCE', 'FILE', 'MAP', 'ENTRIES', 'SCHEMA'], rows));
+  const rows = found.map((r) => [r.name ?? '-', display(r.file, cwd), r.entries ?? '-', r.error ? `error: ${r.error}` : r.schema ? display(r.schema, cwd) : '-']);
+  out(table(['RESOURCE', 'FILE', 'ENTRIES', 'SCHEMA'], rows));
   return 0;
 }
 
 function list({ target, options, out }) {
-  const maps = target.map ? [target.map] : target.maps;
-  const data = target.document.data;
+  const { map } = target;
+  const entries = target.document.data[map] ?? {};
   if (options.output === 'json' || options.output === 'yaml') {
-    const value = target.map ? (data[target.map] ?? {}) : Object.fromEntries(maps.map((map) => [map, data[map] ?? {}]));
-    printData(value, options.output, out);
+    printData(entries, options.output, out);
     return 0;
   }
-  for (const map of maps) {
-    const entries = Object.entries(data[map] ?? {});
-    if (options.output === 'name') {
-      for (const [key] of entries) out(`${map}/${key}\n`);
-      continue;
-    }
-    if (maps.length > 1) out(`${map}:\n`);
-    const titleField = target.schema?.mapOptions(map).title ?? 'name';
-    const titled = entries.some(([, entry]) => entry && typeof entry[titleField] === 'string');
-    const header = titled ? ['KEY', titleField.toUpperCase()] : ['KEY'];
-    const rows = entries.map(([key, entry]) => (titled ? [key, entry?.[titleField] ?? ''] : [key]));
-    out(rows.length ? table(header, rows, maps.length > 1 ? '  ' : '') : `${maps.length > 1 ? '  ' : ''}no entries\n`);
+  if (options.output === 'name') {
+    for (const key of Object.keys(entries)) out(`${map}/${key}\n`);
+    return 0;
   }
+  const titleField = target.schema?.mapOptions(map).title ?? 'name';
+  const titled = Object.values(entries).some((entry) => entry && typeof entry[titleField] === 'string');
+  const header = titled ? ['KEY', titleField.toUpperCase()] : ['KEY'];
+  const rows = Object.entries(entries).map(([key, entry]) => (titled ? [key, entry?.[titleField] ?? ''] : [key]));
+  out(rows.length ? table(header, rows) : 'no entries\n');
   return 0;
 }
 
-function get({ target, name, args, options, out }) {
-  const map = needMap(target, name);
+function get({ target, args, options, out }) {
+  const { map } = target;
   needKey(args, 'get');
   const entries = target.document.data[map] ?? {};
   const found = {};
@@ -307,7 +296,7 @@ const REPLACE_USAGE = 'replace takes -f <file> only, patch takes <key> <field>=<
 function write(verb, context) {
   const { target, name, args, options, out, err, cwd } = context;
   const rules = WRITES[verb];
-  const map = needMap(target, name);
+  const { map } = target;
   const { document, schema } = target;
   const entries = document.data[map] ?? {};
   let changes;
@@ -468,7 +457,7 @@ function parseLoose(text) {
 function remove(context) {
   const { target, name, args, options, out } = context;
   if (options.output && options.output !== 'name') throw new UsageError('delete takes -o name only');
-  const map = needMap(target, name);
+  const { map } = target;
   let keys;
   if (options.filename) {
     if (args.length) throw new UsageError('delete takes -f <file> without a key');
@@ -496,8 +485,8 @@ function remove(context) {
   return 0;
 }
 
-function explainCommand({ target, name, args, out }) {
-  const map = needMap(target, name);
+function explainCommand({ target, args, out }) {
+  const { map } = target;
   if (!target.schema) throw new Error(`${basename(target.file)} has no schema to explain`);
   out(explain(target.schema, map, args[0] ? args[0].split('.') : []));
   return 0;
