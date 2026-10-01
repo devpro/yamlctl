@@ -1,13 +1,61 @@
 # Automate
 
-A pipeline keeps the data file in step with a source system: export the entries, apply them, prune what the source dropped.
+A pipeline writes entries from a file rather than one field at a time: `-f` takes entries under their keys, as YAML or JSON, the shape `get` and `list -o yaml` print.
 
-## Step 1 - Apply a file of entries
+## Step 1 - Several entries at once
+
+1. Write a folder and a project inside it
+
+   ```bash exec
+   mkdir -p sync && cat > sync/team.yaml <<'EOF'
+   payments:
+     name: Payments
+     is_folder: true
+     parent_project: applications
+   payroll_api:
+     name: Payroll API
+     parent_project: payments
+   EOF
+   ```
+
+   > [!NOTE]
+   > The file sits in `sync/` so it is not taken for a data file of the directory.
+
+2. Create them
+
+   <!-- verify: expect="projects/payroll_api created" -->
+
+   ```bash exec
+   yamlctl projects create -f sync/team.yaml
+   ```
+
+   > [!NOTE]
+   > Every entry is checked against the file as it will be, so `payroll_api` may name a folder created alongside it, and the file is written once, or not at all.
+
+3. Create them again
+
+   <!-- verify: expect="already exists" -->
+
+   ```bash exec
+   yamlctl projects create -f sync/team.yaml; echo "exit $?"
+   ```
+
+4. Delete the entries the file names
+
+   <!-- verify: expect="projects/payments deleted" -->
+
+   ```bash exec
+   yamlctl projects delete -f sync/team.yaml
+   ```
+
+## Step 2 - Sync from a source system
+
+A sync keeps the data file in step with a source system: export the entries, apply them, prune what the source dropped.
 
 1. Write the export of the source system
 
    ```bash exec
-   mkdir -p sync && cat > sync/apps.yaml <<'EOF'
+   cat > sync/apps.yaml <<'EOF'
    app_1042:
      name: Storefront
      parent_project: applications
@@ -19,11 +67,6 @@ A pipeline keeps the data file in step with a source system: export the entries,
      parent_project: applications
    EOF
    ```
-
-   > [!NOTE]
-   > Entries under their keys, the shape `get` and `list -o yaml` print.
-   > JSON works as well, being valid YAML.
-   > The file sits in `sync/` so it is not taken for a data file of the directory.
 
 2. Apply it, pruning the `app_` entries it does not hold
 
@@ -41,9 +84,7 @@ A pipeline keeps the data file in step with a source system: export the entries,
    yamlctl projects apply -f sync/apps.yaml --prune --prefix app_
    ```
 
-## Step 2 - The source changes
-
-1. `app_1042` is renamed and `app_7` is gone
+4. `app_1042` is renamed and `app_7` is gone from the source
 
    ```bash exec
    cat > sync/apps.yaml <<'EOF'
@@ -56,7 +97,7 @@ A pipeline keeps the data file in step with a source system: export the entries,
    EOF
    ```
 
-2. Apply it
+5. Apply it
 
    <!-- verify: expect="projects/app_7 pruned" -->
 
@@ -70,6 +111,8 @@ A pipeline keeps the data file in step with a source system: export the entries,
 
 ## Step 3 - Output for a pipeline
 
+`-o` turns what a command prints into data: `name` for resource paths, `json` or `yaml` for the entries.
+
 1. The resource paths of what was applied
 
    <!-- verify: expect="projects/app_1042" -->
@@ -78,7 +121,15 @@ A pipeline keeps the data file in step with a source system: export the entries,
    yamlctl projects apply -f sync/apps.yaml --prune --prefix app_ -o name
    ```
 
-2. An entry as JSON
+2. The entry a write left, as YAML
+
+   <!-- verify: expect="description: Checkout" -->
+
+   ```bash exec
+   yamlctl projects patch app_1042 description=Checkout -o yaml
+   ```
+
+3. An entry as JSON
 
    <!-- verify: expect="210987654321" -->
 
@@ -86,7 +137,15 @@ A pipeline keeps the data file in step with a source system: export the entries,
    yamlctl projects get app_1042 -o json
    ```
 
-3. The whole directory against its schemas, the exit status being the result
+4. Every resource path, one per line
+
+   <!-- verify: expect="projects/billing_api" -->
+
+   ```bash exec
+   yamlctl projects list -o name
+   ```
+
+5. The whole directory against its schemas, the exit status being the result
 
    <!-- verify: expect="entries, valid" -->
 
@@ -118,4 +177,35 @@ A pipeline keeps the data file in step with a source system: export the entries,
 
    > [!NOTE]
    > `apply -f` merges each entry into the one there, as `kubectl apply` does: a field left out is kept, a field set to `null` is removed.
-   > `replace -f` takes each entry whole.
+
+## Step 5 - Replace whole entries
+
+1. Write `billing_api` with only a name and a parent
+
+   ```bash exec
+   cat > sync/billing.yaml <<'EOF'
+   billing_api:
+     name: Billing
+     parent_project: applications
+   EOF
+   ```
+
+2. Replace it
+
+   <!-- verify: expect="projects/billing_api replaced" -->
+
+   ```bash exec
+   yamlctl projects replace -f sync/billing.yaml
+   ```
+
+3. Get it
+
+   <!-- verify: expect="parent_project: applications" -->
+
+   ```bash exec
+   yamlctl projects get billing_api
+   ```
+
+   > [!NOTE]
+   > `replace -f` takes each entry whole: `account` and `risk_profile`, left out of the file, are gone.
+   > It refuses an entry that is not there, where `apply -f` would create it.

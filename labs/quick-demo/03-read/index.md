@@ -26,6 +26,17 @@
    yamlctl projects get checkout_api
    ```
 
+4. Get it by the singular
+
+   <!-- verify: expect="business_impact: HBI" -->
+
+   ```bash exec
+   yamlctl project get checkout_api
+   ```
+
+   > [!NOTE]
+   > A resource is the map, `projects:`, and the schema declares `"singular": "project"` on it, so both names reach it, as kubectl reaches `pods` as `pod`.
+
 ## Step 2 - Explain
 
 1. List the fields a project holds

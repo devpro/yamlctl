@@ -34,5 +34,13 @@ A GitHub workflow is checked against its SchemaStore schema, fetched and cached 
    yamlctl -C .github/workflows check; echo "exit $?"
    ```
 
+4. Check it again from the cache alone, as an air-gapped runner would
+
+   <!-- verify: requires=network expect="missing required field runs-on" -->
+
+   ```bash exec
+   yamlctl -C .github/workflows check --offline; echo "exit $?"
+   ```
+
    > [!TIP]
-   > `--offline` reads the cached schema only, for an air-gapped runner.
+   > `--offline` never fetches, and `--refresh` fetches again whatever the cache holds.

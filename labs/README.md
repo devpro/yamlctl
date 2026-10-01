@@ -4,7 +4,7 @@ Interactive labs for yamlctl, written for [sidelab](https://github.com/devpro/si
 
 Lab                            | Covers
 -------------------------------|------------------------------------------------------------------------------------------------
-[quick-demo](quick-demo/)      | Reading, writing, refusals, a sync with `apply -f --prune`, output for a pipeline, a remote schema
+[quick-demo](quick-demo/)      | Reading, every write verb and its refusals, `-f` files, a sync with `apply -f --prune`, `-o` for a pipeline, a remote schema
 
 ## Shape of a lab
 
@@ -37,4 +37,4 @@ yamlctl projects create billing_api name="Billing API"
 ## Version pinning
 
 A lab installs the published package, `YAMLCTL_VERSION` in `lab.yaml`, not the working tree.
-`quick-demo` needs **0.1.2**, the first release with the kubectl verbs, `-f` files, `--prune` and `-o` on writes.
+`quick-demo` needs **0.1.3**, the first release naming a resource after its map, with the singular its schema declares.
