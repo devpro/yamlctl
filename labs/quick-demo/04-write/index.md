@@ -7,7 +7,7 @@
    <!-- verify: expect="projects/billing_api created" -->
 
    ```bash exec
-   yamlctl project create billing_api name="Billing API" parent_project=applications \
+   yamlctl projects create billing_api name="Billing API" parent_project=applications \
      account=005217217997 risk_profile.business_impact=MBI
    ```
 
@@ -16,7 +16,7 @@
    <!-- verify: expect="projects/checkout_api patched" -->
 
    ```bash exec
-   yamlctl project patch checkout_api description="Payment processing"
+   yamlctl projects patch checkout_api description="Payment processing"
    ```
 
 3. Open [project.yaml](:open:project.yaml)
@@ -29,7 +29,7 @@
    <!-- verify: expect="patched (no change)" -->
 
    ```bash exec
-   yamlctl project patch checkout_api description="Payment processing"
+   yamlctl projects patch checkout_api description="Payment processing"
    ```
 
    > [!NOTE]
@@ -44,7 +44,7 @@ Each refusal names the problem, exits 1, and leaves the file as it was.
    <!-- verify: expect="no such field" -->
 
    ```bash exec
-   yamlctl project patch billing_api risk_profle.business_impact=HBI; echo "exit $?"
+   yamlctl projects patch billing_api risk_profle.business_impact=HBI; echo "exit $?"
    ```
 
 2. A value outside the allowed list
@@ -52,7 +52,7 @@ Each refusal names the problem, exits 1, and leaves the file as it was.
    <!-- verify: expect="must be one of" -->
 
    ```bash exec
-   yamlctl project patch billing_api risk_profile.business_impact=HIGH; echo "exit $?"
+   yamlctl projects patch billing_api risk_profile.business_impact=HIGH; echo "exit $?"
    ```
 
 3. A parent that is not a folder, on a field that cannot change without `--force`
@@ -60,7 +60,7 @@ Each refusal names the problem, exits 1, and leaves the file as it was.
    <!-- verify: expect="must have is_folder: true" -->
 
    ```bash exec
-   yamlctl project patch billing_api parent_project=checkout_api; echo "exit $?"
+   yamlctl projects patch billing_api parent_project=checkout_api; echo "exit $?"
    ```
 
 4. A key already taken
@@ -68,7 +68,7 @@ Each refusal names the problem, exits 1, and leaves the file as it was.
    <!-- verify: expect="already exists" -->
 
    ```bash exec
-   yamlctl project create billing_api name="Billing again"; echo "exit $?"
+   yamlctl projects create billing_api name="Billing again"; echo "exit $?"
    ```
 
 5. An entry other entries still name
@@ -76,7 +76,7 @@ Each refusal names the problem, exits 1, and leaves the file as it was.
    <!-- verify: expect="still named by" -->
 
    ```bash exec
-   yamlctl project delete applications; echo "exit $?"
+   yamlctl projects delete applications; echo "exit $?"
    ```
 
 > [!TIP]

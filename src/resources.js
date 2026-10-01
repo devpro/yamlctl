@@ -1,6 +1,8 @@
-// What a resource name on the command line points at: a file and the map of entries inside it.
+// What a resource name on the command line points at: a map of entries, and the file holding it.
 //
-// `yamlctl project list` reads project.yaml, or project.yml, and `yamlctl ignore_rules list` reads whichever file holds a map of that name, so a file holding one map and a file holding several are both reached without naming anything twice.
+// A resource is always a map and never a file, so `yamlctl projects list` reads the `projects:` map of whichever file holds it.
+// Naming a file holding one map after its file instead made the same kind of thing singular in one place and plural in the next, and renamed it the day a second map joined the file.
+// The singular is accepted as well, `yamlctl project list`, only where the schema declares it, the way kubectl reads `names.singular` off a resource rather than guessing at English.
 import { existsSync, readdirSync, statSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { readDocument } from './document.js';
@@ -28,7 +30,14 @@ export function openFile(file) {
     schemaError = `names ${displayUri(found.uri)}, which does not exist`;
   }
   const maps = schema ? schema.entryMaps() : mapsWithoutSchema(document.data);
-  return { file, document, schema, schemaPath: schema ? schema.path : found.uri ? displayUri(found.uri) : null, schemaError, maps };
+  const singulars = Object.fromEntries(maps.map((map) => [map, schema?.mapOptions(map).singular]).filter(([, singular]) => typeof singular === 'string' && singular));
+  return { file, document, schema, schemaPath: schema ? schema.path : found.uri ? displayUri(found.uri) : null, schemaError, maps, singulars };
+}
+
+// The map a name on the command line means in one opened file: the map of that name, else the one declaring it as its singular.
+function mapNamed(opened, name) {
+  if (opened.maps.includes(name)) return name;
+  return opened.maps.find((map) => opened.singulars[map] === name) ?? null;
 }
 
 // Without a schema, a map of entries is a mapping whose every value is itself a mapping, or empty: `servers: {web: {...}, db: {...}}`.
@@ -53,36 +62,35 @@ export function dataFiles(dir) {
 const stem = (file) => basename(file).replace(YAML, '');
 
 // The file and map a resource name points at.
-// `map` is null when the name is a file holding several maps, which `list` and `check` accept and the commands acting on one entry refuse, naming the maps to use instead.
 export function resolveResource({ dir, name, file = null }) {
   if (file) {
     const opened = openFile(file);
-    if (name === stem(file) || name === basename(file)) return single(opened);
-    if (opened.maps.includes(name)) return { ...opened, map: name };
+    const map = mapNamed(opened, name);
+    if (map) return { ...opened, map };
     throw new Error(`${file} holds no map ${name}, only ${opened.maps.join(', ') || 'none'}`);
   }
 
   const files = dataFiles(dir);
-  const byStem = files.filter((path) => stem(path) === name);
-  if (byStem.length > 1) throw new Error(`${byStem.map((path) => basename(path)).join(' and ')} both exist, name one with --data-file`);
-  if (byStem.length === 1) return single(openFile(byStem[0]));
-
   const holding = [];
   for (const path of files) {
     const opened = openFile(path);
-    if (opened.maps.includes(name)) holding.push({ ...opened, map: name });
+    const map = mapNamed(opened, name);
+    if (map) holding.push({ ...opened, map });
   }
   if (holding.length === 1) return holding[0];
   if (holding.length > 1) throw new Error(`${holding.map((h) => basename(h.file)).join(' and ')} both hold a map ${name}, name one with --data-file`);
-  const known = listResources(dir).map((resource) => resource.name);
-  throw new Error(`no resource ${name} in ${dir}${known.length ? `, the resources are ${known.join(', ')}` : ', which holds no YAML data file'}`);
-}
-
-function single(opened) {
-  return { ...opened, map: opened.maps.length === 1 ? opened.maps[0] : null };
+  // A file name is the likeliest wrong guess, so it is answered with the maps it holds rather than with every resource of the directory.
+  const named = files.filter((path) => stem(path) === name || basename(path) === name);
+  if (named.length) {
+    const maps = [...new Set(named.flatMap((path) => openFile(path).maps))];
+    throw new Error(`${named.map((path) => basename(path)).join(' and ')} ${named.length > 1 ? 'are files' : 'is a file'} rather than a resource, ${maps.length ? `use ${maps.map((map) => `yamlctl ${map} ...`).join(', ')}` : 'and holds no map of entries'}`);
+  }
+  const known = listResources(dir).filter((resource) => resource.name).map((resource) => resource.name);
+  throw new Error(`no resource ${name} in ${dir}${known.length ? `, the resources are ${known.join(', ')}` : files.length ? ', which holds no map of entries' : ', which holds no YAML data file'}`);
 }
 
 // Every name the command line accepts, the way `kubectl api-resources` lists them.
+// A file that cannot be read is listed with its error and no name, since hiding it would hide the resources it holds.
 export function listResources(dir) {
   const out = [];
   for (const path of dataFiles(dir)) {
@@ -90,16 +98,11 @@ export function listResources(dir) {
     try {
       opened = openFile(path);
     } catch (e) {
-      out.push({ name: stem(path), file: path, map: null, entries: null, schema: null, error: e instanceof Error ? e.message : String(e) });
+      out.push({ name: null, singular: null, file: path, entries: null, schema: null, error: e instanceof Error ? e.message : String(e) });
       continue;
     }
     const schema = opened.schema ? opened.schemaPath : null;
-    if (opened.maps.length === 1) {
-      out.push({ name: stem(path), file: path, map: opened.maps[0], entries: count(opened, opened.maps[0]), schema });
-      continue;
-    }
-    for (const map of opened.maps) out.push({ name: map, file: path, map, entries: count(opened, map), schema });
-    if (!opened.maps.length) out.push({ name: stem(path), file: path, map: null, entries: 0, schema });
+    for (const map of opened.maps) out.push({ name: map, singular: opened.singulars[map] ?? null, file: path, entries: count(opened, map), schema });
   }
   return out;
 }

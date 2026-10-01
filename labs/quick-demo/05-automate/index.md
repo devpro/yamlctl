@@ -30,7 +30,7 @@ A pipeline keeps the data file in step with a source system: export the entries,
    <!-- verify: expect="projects/app_7 created" -->
 
    ```bash exec
-   yamlctl project apply -f sync/apps.yaml --prune --prefix app_
+   yamlctl projects apply -f sync/apps.yaml --prune --prefix app_
    ```
 
 3. Run it again
@@ -38,7 +38,7 @@ A pipeline keeps the data file in step with a source system: export the entries,
    <!-- verify: expect="projects/app_7 unchanged" -->
 
    ```bash exec
-   yamlctl project apply -f sync/apps.yaml --prune --prefix app_
+   yamlctl projects apply -f sync/apps.yaml --prune --prefix app_
    ```
 
 ## Step 2 - The source changes
@@ -61,7 +61,7 @@ A pipeline keeps the data file in step with a source system: export the entries,
    <!-- verify: expect="projects/app_7 pruned" -->
 
    ```bash exec
-   yamlctl project apply -f sync/apps.yaml --prune --prefix app_
+   yamlctl projects apply -f sync/apps.yaml --prune --prefix app_
    ```
 
    > [!IMPORTANT]
@@ -75,7 +75,7 @@ A pipeline keeps the data file in step with a source system: export the entries,
    <!-- verify: expect="projects/app_1042" -->
 
    ```bash exec
-   yamlctl project apply -f sync/apps.yaml --prune --prefix app_ -o name
+   yamlctl projects apply -f sync/apps.yaml --prune --prefix app_ -o name
    ```
 
 2. An entry as JSON
@@ -83,7 +83,7 @@ A pipeline keeps the data file in step with a source system: export the entries,
    <!-- verify: expect="210987654321" -->
 
    ```bash exec
-   yamlctl project get app_1042 -o json
+   yamlctl projects get app_1042 -o json
    ```
 
 3. The whole directory against its schemas, the exit status being the result
@@ -99,7 +99,7 @@ A pipeline keeps the data file in step with a source system: export the entries,
 1. Export every project
 
    ```bash exec
-   yamlctl project list -o yaml > sync/projects.yaml
+   yamlctl projects list -o yaml > sync/projects.yaml
    ```
 
 2. Rename `billing_api` in [sync/projects.yaml](:open:sync/projects.yaml), or run
@@ -113,7 +113,7 @@ A pipeline keeps the data file in step with a source system: export the entries,
    <!-- verify: expect="projects/billing_api configured" -->
 
    ```bash exec
-   yamlctl project apply -f sync/projects.yaml
+   yamlctl projects apply -f sync/projects.yaml
    ```
 
    > [!NOTE]

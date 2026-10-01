@@ -30,7 +30,7 @@ What a block must print is written beside it, and names something the output hol
 <!-- verify: expect="projects/billing_api created" -->
 
 ```bash exec
-yamlctl project create billing_api name="Billing API"
+yamlctl projects create billing_api name="Billing API"
 ```
 ````
 
