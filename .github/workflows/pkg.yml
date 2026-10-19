@@ -41,26 +41,5 @@ jobs:
       - name: Run unit tests
         run: npm test
 
-      # npmjs.org refuses to publish over an existing version, so a push that did not bump package.json is skipped rather than failed.
-      - name: Check whether this version is already published
-        id: registry
-        run: |
-          version=$(node -p "require('./package.json').version")
-          if published=$(npm view yamlctl version 2>"$RUNNER_TEMP/npm-view.err"); then
-            :
-          elif grep -q E404 "$RUNNER_TEMP/npm-view.err"; then
-            published=
-          else
-            cat "$RUNNER_TEMP/npm-view.err" >&2
-            exit 1
-          fi
-          echo "yamlctl is $version in package.json and ${published:-absent} on npmjs.org"
-          if [ "$version" = "$published" ]; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Publish NPM package
-        if: steps.registry.outputs.publish == 'true'
-        run: npm publish
+        uses: devpro/github-workflow-parts/actions/npm/publish@c6d06a61a377a41dc192ce58f08a0b5100d9a2bc
