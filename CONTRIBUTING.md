@@ -51,3 +51,8 @@ scripts/             smoke_pack.sh
 src/                 one module per concern, described in AGENTS.md
 test/                one test file per module, and fixtures/workspace
 ```
+
+## Run the pipeline locally
+
+[IstarCI](https://github.com/devpro/istarci) runs the GitHub Actions pipeline in Docker before the push.
+`istarci add` and `istarci install-hook` set it up for this repository.
