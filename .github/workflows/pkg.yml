@@ -18,28 +18,10 @@ permissions:
 jobs:
   npm-publication:
     name: "Package yamlctl"
-    runs-on: ubuntu-latest
     permissions:
       contents: read
       # npm trusted publishing: the package is published with a short-lived OIDC token rather than a stored secret
       id-token: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: 24
-          # writes the .npmrc that npm publish reads,
-          # so the OIDC exchange knows which registry to present the token to
-          registry-url: https://registry.npmjs.org
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run unit tests
-        run: npm test
-
-      - name: Publish NPM package
-        uses: devpro/github-workflow-parts/actions/npm/publish@c6d06a61a377a41dc192ce58f08a0b5100d9a2bc
+    uses: devpro/github-workflow-parts/.github/workflows/reusable-npm-publication.yml@f9e473710e83b91ff0f594476ca4e6bc0954e1f9
+    with:
+      workflow-parts-version: f9e473710e83b91ff0f594476ca4e6bc0954e1f9

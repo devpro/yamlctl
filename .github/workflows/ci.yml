@@ -21,33 +21,20 @@ permissions:
 jobs:
   markup-lint:
     name: Markup
-    uses: devpro/github-workflow-parts/.github/workflows/reusable-markup-lint.yml@c6d06a61a377a41dc192ce58f08a0b5100d9a2bc
+    uses: devpro/github-workflow-parts/.github/workflows/reusable-markup-lint.yml@f9e473710e83b91ff0f594476ca4e6bc0954e1f9
 
   test:
     name: "Test on Node.js ${{ matrix.node-version }}"
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
     strategy:
       matrix:
-        node-version: [22, 24]
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v7
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: ${{ matrix.node-version }}
-          cache: npm
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Run unit tests
-        run: npm test
-
-      - name: Verify package installation and run
-        run: npm run smoke
-
-      - name: Check the workflows against their schema
-        run: node bin/yamlctl.js -C .github/workflows check
+        node-version: ["22", "24", "26"]
+    uses: devpro/github-workflow-parts/.github/workflows/reusable-node-quality.yml@f9e473710e83b91ff0f594476ca4e6bc0954e1f9
+    with:
+      # The package installs and runs, and yamlctl checks the workflows of this repository against their schema.
+      custom-tests: |
+        npm run smoke
+        node bin/yamlctl.js -C .github/workflows check
+      job-name: Test on Node.js ${{ matrix.node-version }}
+      node-version: ${{ matrix.node-version }}
+      timeout-minutes: 10
+      workflow-parts-version: f9e473710e83b91ff0f594476ca4e6bc0954e1f9
