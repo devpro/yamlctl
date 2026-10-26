@@ -22,6 +22,6 @@ jobs:
       contents: read
       # npm trusted publishing: the package is published with a short-lived OIDC token rather than a stored secret
       id-token: write
-    uses: devpro/github-workflow-parts/.github/workflows/reusable-npm-publication.yml@13ac7ccf4ba593797f8c80a75f2559ce0fc2d09e
+    uses: devpro/github-workflow-parts/.github/workflows/reusable-npm-publication.yml@591b0c7bfba6fbc7b0cab7d896447e0732b819de
     with:
-      workflow-parts-version: 13ac7ccf4ba593797f8c80a75f2559ce0fc2d09e
+      workflow-parts-version: 591b0c7bfba6fbc7b0cab7d896447e0732b819de
