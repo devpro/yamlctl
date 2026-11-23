@@ -63,7 +63,7 @@ export function baseOf(document, uri) {
   const id = document?.$id ?? document?.id;
   if (typeof id !== 'string') return uri;
   try {
-    return new URL(id, uri).href.replace(/#.*$/, '');
+    return new URL(id, uri).href.split('#', 1)[0];
   } catch {
     return uri;
   }
@@ -78,7 +78,7 @@ export function referencedDocuments(document, base) {
     for (const [key, value] of Object.entries(node)) {
       if (key === '$ref' && typeof value === 'string' && !value.startsWith('#')) {
         try {
-          found.add(new URL(value, base).href.replace(/#.*$/, ''));
+          found.add(new URL(value, base).href.split('#', 1)[0]);
         } catch {
           // A reference that is not a URL cannot be followed, and validation says so when it reaches it.
         }
@@ -94,24 +94,32 @@ export function referencedDocuments(document, base) {
 // A fetch that fails falls back to a cached copy of any age, said in a warning.
 // A document with no copy at all is recorded as a failure rather than thrown, so the command decides what an unavailable schema means for what it was asked to do.
 export async function prefetch(uris, { offline = false, refresh = false, env = process.env, warn = () => {}, fetchImpl = globalThis.fetch, now = Date.now() } = {}) {
-  const queue = [...uris];
-  const seen = new Set();
-  while (queue.length) {
-    const uri = queue.shift();
-    if (seen.has(uri)) continue;
-    seen.add(uri);
-    let document = null;
-    if (isRemote(uri)) {
-      document = await remoteDocument(uri, { offline, refresh, env, warn, fetchImpl, now });
-      if (document) documents.set(uri, document);
-    } else if (uri.startsWith('file:') && hasDocument(uri)) {
-      try {
-        document = documentAt(uri);
-      } catch {
-        document = null;
-      }
-    }
-    if (document) queue.push(...referencedDocuments(document, baseOf(document, uri)));
+  await prefetchLevel([...new Set(uris)], new Set(uris), { offline, refresh, env, warn, fetchImpl, now });
+}
+
+// The documents of one level are fetched together, since one after the other the time, and the timeout of a server that does not answer, is counted once per document.
+// Their warnings are kept until all are there, so they come in the same order whichever answers first.
+async function prefetchLevel(uris, seen, options) {
+  if (!uris.length) return;
+  const warnings = new Map(uris.map((uri) => [uri, []]));
+  const reached = await Promise.all(uris.map((uri) => reachableDocument(uri, { ...options, warn: (text) => warnings.get(uri).push(text) })));
+  for (const text of [...warnings.values()].flat()) options.warn(text);
+  const next = new Set(reached.flatMap((document, i) => (document ? referencedDocuments(document, baseOf(document, uris[i])) : [])).filter((uri) => !seen.has(uri)));
+  for (const uri of next) seen.add(uri);
+  await prefetchLevel([...next], seen, options);
+}
+
+async function reachableDocument(uri, options) {
+  if (isRemote(uri)) {
+    const document = await remoteDocument(uri, options);
+    if (document) documents.set(uri, document);
+    return document;
+  }
+  if (!uri.startsWith('file:') || !hasDocument(uri)) return null;
+  try {
+    return documentAt(uri);
+  } catch {
+    return null;
   }
 }
 
