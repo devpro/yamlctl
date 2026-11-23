@@ -23,7 +23,7 @@
     "LICENSE"
   ],
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "repository": {
     "type": "git",
@@ -35,6 +35,7 @@
   "homepage": "https://github.com/devpro/yamlctl#readme",
   "scripts": {
     "test": "node --test test/*.test.js",
+    "test:coverage": "mkdir -p coverage && node --experimental-test-coverage --test-coverage-include=\"bin/**\" --test-coverage-include=\"src/**\" --test-reporter=spec --test-reporter-destination=stdout --test-reporter=lcov --test-reporter-destination=coverage/lcov.info --test test/*.test.js",
     "smoke": "scripts/smoke_pack.sh"
   },
   "dependencies": {

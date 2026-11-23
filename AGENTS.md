@@ -14,7 +14,7 @@ src/schema.js     finding, reading and applying a schema, and typing a value fro
 src/store.js      every schema document by URI, fetching and caching the remote ones
 ```
 
-Node.js 20 or later, plain JavaScript as ES modules, no build step.
+Node.js 22 or later, plain JavaScript as ES modules, no build step.
 Two dependencies, `yaml` for editing a document in place and `ajv` for validation, and adding a third needs a reason a small function cannot answer.
 
 ## Working rules

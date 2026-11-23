@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/devpro/yamlctl/actions/workflows/ci.yml/badge.svg)](https://github.com/devpro/yamlctl/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/yamlctl)](https://www.npmjs.com/package/yamlctl)
+[![Quality Gate Status](https://sonarcloud.io/api/project_badges/measure?project=devpro_yamlctl&metric=alert_status)](https://sonarcloud.io/dashboard?id=devpro_yamlctl)
 
 Edit YAML files from the command line.
 
@@ -15,7 +16,7 @@ Edit YAML files from the command line.
 
 ## Install
 
-Node.js 20 or later:
+Node.js 22 or later:
 
 ```bash
 npm install --global yamlctl
