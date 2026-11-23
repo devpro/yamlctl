@@ -9,6 +9,7 @@ src/cli.js        the grammar, `yamlctl <resource> <verb>`, and every command
 src/document.js   reading and writing a YAML file without disturbing what is not edited
 src/explain.js    the schema read back as text
 src/resources.js  what a resource name points at: a file and a map of entries in it
+src/reuse.js      the results of a validator's functions, kept for the length of one check
 src/rules.js      the x-yamlctl checks spanning more than one entry
 src/schema.js     finding, reading and applying a schema, and typing a value from it
 src/store.js      every schema document by URI, fetching and caching the remote ones
@@ -56,6 +57,9 @@ Applies to Markdown, code comments, commit messages, command output and prose in
 - **A named schema that cannot be loaded blocks a write** and only warns on a read, since checking nothing where the file asked for a check is worse than stopping.
 - **A failing alternative is reported through its closest branch**: the value validated against each branch on its own, ranked by type agreement,
   then by problems on the value itself, then by total, the way established validators pick a best match.
+- **A check asks each question once**: ajv explores recursive alternatives in exponential time and repeats its errors as much,
+  so the functions it generates remember their results for one check, through its `code.process` option, and so does the search for the closest branch.
+  A value too deep for that to fit the stack is checked by a plain ajv.
 - **A map of entries is recognised by shape**, a top-level property whose `additionalProperties` is an object schema, so a schema needs nothing added to be used.
 - **A value is typed by the schema**, never by YAML: `005217217997` stays a string where the schema says string.
 - **Nothing is written unless something changed**, and nothing is written at all when a check fails.
