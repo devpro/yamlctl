@@ -9,6 +9,7 @@ import { existsSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
+import { reuseResults, reuser } from './reuse.js';
 import { baseOf, documentAt, hasDocument, isRemote, referencedDocuments } from './store.js';
 
 const require = createRequire(import.meta.url);
@@ -57,10 +58,20 @@ function pointerKeys(fragment, pointer) {
   return fragment
     .split('/')
     .filter(Boolean)
-    .map((key) => decodeURIComponent(key).replace(/~1/g, '/').replace(/~0/g, '~'));
+    .map((key) => decodeURIComponent(key).replaceAll('~1', '/').replaceAll('~0', '~'));
+}
+
+function typeOf(value) {
+  if (value === null) return 'null';
+  return Array.isArray(value) ? 'array' : typeof value;
 }
 
 const isNull = (schema) => schema?.type === 'null' || (Array.isArray(schema?.type) && schema.type.length === 1 && schema.type[0] === 'null');
+
+function validatorOf(draft) {
+  if (draft.includes('2020-12')) return Ajv2020;
+  return draft.includes('2019-09') ? Ajv2019 : Ajv;
+}
 
 export class Schema {
   // `uri` defaults to an address of its own for a schema built in memory.
@@ -73,11 +84,9 @@ export class Schema {
     this.bases = new Map([[uri, baseOf(root, uri)]]);
     this.missing = [];
     const draft = String(root.$schema ?? '');
-    const Validator = draft.includes('2020-12') ? Ajv2020 : draft.includes('2019-09') ? Ajv2019 : Ajv;
-    // Unknown formats and keywords are tolerated rather than refused, since a schema written for an editor carries both and they say nothing about validity.
-    this.ajv = new Validator({ allErrors: true, strict: false, validateFormats: false });
-    this.ajv.addKeyword(EXTENSION);
-    this.ajv.addSchema(root, uri);
+    this.Validator = validatorOf(draft);
+    this.added = [[root, uri]];
+    this.ajv = this.validator({ code: { process: reuseResults } });
 
     // Every document a reference can reach is given to the validator up front, since it compiles synchronously and cannot go looking for one halfway through.
     const added = new Set([root]);
@@ -95,10 +104,20 @@ export class Schema {
       this.bases.set(next, baseOf(document, next));
       if (!added.has(document)) {
         added.add(document);
+        this.added.push([document, next]);
         this.ajv.addSchema(document, next);
       }
       queue.push(...referencedDocuments(document, this.bases.get(next)));
     }
+  }
+
+  // Unknown formats and keywords are tolerated rather than refused, since a schema written for an editor carries both and they say nothing about validity.
+  validator(options) {
+    const ajv = new this.Validator({ allErrors: true, strict: false, validateFormats: false, ...options });
+    ajv.reuse = reuser(distinct);
+    ajv.addKeyword(EXTENSION);
+    for (const [document, uri] of this.added) ajv.addSchema(document, uri);
+    return ajv;
   }
 
   // A pointer relative to the root, `#/definitions/project`, or absolute, `<uri>#/definitions/project`.
@@ -198,28 +217,35 @@ export class Schema {
   // Every problem in one value, each with the path it was found at.
   // A failing `anyOf` or `oneOf` is reported through the branch closest to the value, found by validating the value against each branch on its own.
   // ajv reports every branch, which reads as contradictions: a job told both to add `uses` and to drop `steps`.
-  validate(pointer, value, prefix, depth = 0) {
+  validate(pointer, value, prefix) {
+    return this.problems(pointer, value, prefix, 0, new Map());
+  }
+
+  // Branches leading back to the same schema ask the same question again, once per combination of branches, so each answer is kept.
+  // The value is part of the question since two paths can read the same, `a.b` and `a` then `b`, and the depth since it bounds what is explained.
+  problems(pointer, value, prefix, depth, known) {
+    const key = JSON.stringify([pointer, prefix, depth]);
+    if (!known.has(key)) known.set(key, new Map());
+    const answers = known.get(key);
+    if (!answers.has(value)) answers.set(value, this.explained(pointer, value, prefix, depth, known));
+    return answers.get(value);
+  }
+
+  explained(pointer, value, prefix, depth, known) {
     const full = this.absolute(pointer).replace(/#$/, '');
-    let check;
-    try {
-      check = this.ajv.getSchema(full);
-    } catch (e) {
-      const reason = e instanceof Error ? e.message : String(e);
-      throw new Error(this.missing.length ? `the schema cannot be applied, ${this.missing.map(displayUri).join(', ')} could not be loaded (${reason})` : `the schema cannot be applied: ${reason}`);
-    }
-    if (!check) throw new Error(`cannot compile the schema at ${full}`);
-    if (check(value)) return [];
+    const found = this.errorsOf(full, value);
+    if (!found) return [];
     // A branch allowing null never explains anything, since the value is not null.
-    let errors = (check.errors ?? []).filter((error) => !(error.keyword === 'type' && [].concat(error.params.type).join() === 'null'));
+    let errors = found.filter((error) => !(error.keyword === 'type' && [error.params.type].flat().join() === 'null'));
     const closest = [];
     const handled = [];
     const alternatives = errors.filter((error) => error.keyword === 'anyOf' || error.keyword === 'oneOf').sort((x, y) => x.instancePath.length - y.instancePath.length);
     for (const alternative of alternatives) {
       if (handled.some((path) => within(alternative.instancePath, path))) continue;
-      const branches = depth < 8 ? this.branches(full.includes('#') ? full : `${full}#`, alternative, value) : null;
+      const branches = depth < 8 ? this.branches(full, alternative, value) : null;
       if (!branches) continue;
       const here = `${prefix}${dotted(alternative.instancePath)}`;
-      const results = branches.map((branch) => this.validate(branch.pointer, branch.value, here, depth + 1));
+      const results = branches.map((branch) => this.problems(branch.pointer, branch.value, here, depth + 1, known));
       // A oneOf failing because two branches pass is not a problem any branch can explain, so its own message is kept.
       if (results.some((result) => !result.length)) continue;
       // The closest branch is the one the value's own fields agree with most, so problems on the value itself count first, since a problem deeper down means the shape matched.
@@ -235,10 +261,37 @@ export class Schema {
     return [...new Set([...formatErrors(errors, prefix), ...closest])];
   }
 
+  // The errors of a value, or null when it is valid.
+  // Reusing results takes stack of its own, so a value deeper than that allows is checked again without it.
+  errorsOf(full, value) {
+    let check = this.compiled(full);
+    try {
+      if (check(value)) return null;
+    } catch (e) {
+      if (!(e instanceof RangeError)) throw e;
+      this.plain ??= this.validator({});
+      check = this.compiled(full, this.plain);
+      if (check(value)) return null;
+    }
+    return check.errors ?? [];
+  }
+
+  compiled(full, ajv = this.ajv) {
+    let check;
+    try {
+      check = ajv.getSchema(full);
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : String(e);
+      throw new Error(this.missing.length ? `the schema cannot be applied, ${this.missing.map(displayUri).join(', ')} could not be loaded (${reason})` : `the schema cannot be applied: ${reason}`);
+    }
+    if (!check) throw new Error(`cannot compile the schema at ${full}`);
+    return check;
+  }
+
   // The branches of the alternative an error reports, each as the pointer to validate and the value it applies to, or null when the alternative cannot be located.
   branches(pointer, error, value) {
-    const segments = error.instancePath.split('/').slice(1).map((key) => key.replace(/~1/g, '/').replace(/~0/g, '~'));
-    let here = this.unwrapRef(pointer);
+    const segments = error.instancePath.split('/').slice(1).map((key) => key.replaceAll('~1', '/').replaceAll('~0', '~'));
+    let here = this.unwrapRef(pointer.includes('#') ? pointer : `${pointer}#`);
     let data = value;
     for (const segment of segments) {
       const { schema } = this.at(here);
@@ -264,7 +317,7 @@ export class Schema {
   typeMatches(pointer, value) {
     const allowed = types(this.unwrap(pointer).schema);
     if (!allowed.length) return true;
-    const actual = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
+    const actual = typeOf(value);
     if (actual === 'number') return allowed.includes('number') || (allowed.includes('integer') && Number.isInteger(value));
     return allowed.includes(actual);
   }
@@ -291,11 +344,11 @@ export class Schema {
 }
 
 // A key as one segment of a JSON pointer, escaped the way RFC 6901 and a URI fragment both require.
-export const escapeKey = (key) => encodeURIComponent(String(key).replace(/~/g, '~0').replace(/\//g, '~1'));
+export const escapeKey = (key) => encodeURIComponent(String(key).replaceAll('~', '~0').replaceAll('/', '~1'));
 
 export function types(schema) {
   if (!schema) return [];
-  if (schema.type) return [].concat(schema.type);
+  if (schema.type) return [schema.type].flat();
   if (schema.properties || schema.additionalProperties !== undefined) return ['object'];
   if (schema.items) return ['array'];
   return [];
@@ -333,7 +386,17 @@ function fromEnum(values, text) {
 }
 
 const within = (path, root) => path === root || path.startsWith(`${root}/`);
-const dotted = (instancePath) => instancePath.replace(/\//g, '.').replace(/~1/g, '/').replace(/~0/g, '~');
+const dotted = (instancePath) => instancePath.replaceAll('/', '.').replaceAll('~1', '/').replaceAll('~0', '~');
+
+// The errors that differ in what is read from them: the keyword, the path and the message.
+function distinct(errors) {
+  const found = new Map();
+  for (const error of errors) {
+    const key = JSON.stringify([error.keyword, error.instancePath, describe(error)]);
+    if (!found.has(key)) found.set(key, error);
+  }
+  return [...found.values()];
+}
 
 function formatErrors(errors, prefix) {
   const seen = new Set();
@@ -356,7 +419,7 @@ function describe(error) {
   if (keyword === 'enum') return `must be one of ${params.allowedValues.filter((v) => v !== null).map((v) => JSON.stringify(v)).join(', ')}`;
   if (keyword === 'const') return `must be ${JSON.stringify(params.allowedValue)}`;
   if (keyword === 'required') return `missing required field ${params.missingProperty}`;
-  if (keyword === 'type') return `must be ${[].concat(params.type).join(' or ')}`;
+  if (keyword === 'type') return `must be ${[params.type].flat().join(' or ')}`;
   // A pattern can hold a line break, which printed raw splits one message over two lines.
   if (keyword === 'pattern') return `must match the pattern ${JSON.stringify(params.pattern)}`;
   if (keyword === 'oneOf') return params.passingSchemas ? 'matches more than one of the alternatives, where exactly one is expected' : 'matches none of the alternatives';

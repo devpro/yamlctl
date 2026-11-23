@@ -112,3 +112,9 @@ test('a file edited by hand is checked entry by entry, immutability aside', () =
   assert.deepEqual(checkAll({ schema, data: d }), ['nodes/orphan: parent: gone is not an entry of nodes, create it first', 'links/l2: targets: ghost is not an entry of nodes, create it first']);
   assert.deepEqual(checkAll({ schema, data: data() }), []);
 });
+
+test('an entry naming itself does not count as a reference to it', () => {
+  const schema = new Schema({ type: 'object', properties: { items: { type: 'object', additionalProperties: { type: 'object', properties: { parent: { type: 'string', 'x-yamlctl': { 'key-of': '.' } } } } } } });
+  const data = { items: { a: { parent: 'a' }, b: { parent: 'a' } } };
+  assert.deepEqual(referencesTo({ schema, data, map: 'items', key: 'a' }), ['items/b']);
+});

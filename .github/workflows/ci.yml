@@ -21,14 +21,14 @@ permissions:
 jobs:
   markup-lint:
     name: Markup
-    uses: devpro/github-workflow-parts/.github/workflows/reusable-markup-lint.yml@8c856cd16adc8a0ca01c7889a9c7d98ad8593818
+    uses: devpro/github-workflow-parts/.github/workflows/reusable-markup-lint.yml@398cf79719f90e41e3407bc9f060e297629d800d
 
   test:
     name: "Test on Node.js ${{ matrix.node-version }}"
     strategy:
       matrix:
         node-version: ["22", "24", "26"]
-    uses: devpro/github-workflow-parts/.github/workflows/reusable-node-quality.yml@8c856cd16adc8a0ca01c7889a9c7d98ad8593818
+    uses: devpro/github-workflow-parts/.github/workflows/reusable-node-quality.yml@398cf79719f90e41e3407bc9f060e297629d800d
     with:
       # The package installs and runs, and yamlctl checks the workflows of this repository against their schema.
       custom-tests: |
@@ -36,5 +36,14 @@ jobs:
         node bin/yamlctl.js -C .github/workflows check
       job-name: Test on Node.js ${{ matrix.node-version }}
       node-version: ${{ matrix.node-version }}
+      # One version analyzes the code: several would each overwrite the analysis of the others.
+      sonar-enabled: ${{ matrix.node-version == '24' }}
+      sonar-host-url: ${{ vars.SONAR_HOST_URL || 'https://sonarcloud.io' }}
+      sonar-organization: ${{ vars.SONAR_ORG }}
+      sonar-project-key: ${{ vars.SONAR_PROJECT_KEY }}
+      sonar-project-name: yamlctl
+      test-script: ${{ matrix.node-version == '24' && 'test:coverage' || 'test' }}
       timeout-minutes: 10
-      workflow-parts-version: 8c856cd16adc8a0ca01c7889a9c7d98ad8593818
+      workflow-parts-version: 398cf79719f90e41e3407bc9f060e297629d800d
+    secrets:
+      sonar-token: ${{ secrets.SONAR_TOKEN }}

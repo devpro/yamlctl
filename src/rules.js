@@ -37,37 +37,40 @@ export function checkSet({ schema, data, previous = data, map, key, entry, force
   const defaults = defaultsOf(schema, data, map);
   for (const rule of fieldRules(schema, map)) {
     const value = effective(entry, defaults, rule.field);
-
-    if (rule['key-of'] && value !== null) {
-      const targetMap = rule['key-of'] === '.' ? map : rule['key-of'];
-      const targets = data[targetMap] ?? {};
-      const names = Array.isArray(value) ? value : [value];
-      for (const name of names) {
-        if (targetMap === map && name === key) {
-          problems.push(`${rule.field}: ${key} cannot name itself`);
-          continue;
-        }
-        if (!Object.hasOwn(targets, name)) {
-          problems.push(`${rule.field}: ${name} is not an entry of ${targetMap}, create it first`);
-          continue;
-        }
-        const targetDefaults = defaultsOf(schema, data, targetMap);
-        for (const [field, expected] of Object.entries(rule['target-must'] ?? {})) {
-          const actual = effective(targets[name], targetDefaults, field);
-          if (!same(actual, expected)) problems.push(`${rule.field}: ${name} must have ${field}: ${JSON.stringify(expected)}, it has ${JSON.stringify(actual)}`);
-        }
-      }
-    }
-
+    if (rule['key-of'] && value !== null) problems.push(...namedProblems(rule, value, { schema, data, map, key }));
     if (rule.immutable && Object.hasOwn(previous[map] ?? {}, key) && !force) {
       const before = effective(previous[map][key], defaultsOf(schema, previous, map), rule.field);
-      if (!same(before, value)) {
-        const reason = typeof rule.immutable === 'string' ? `, ${rule.immutable}` : '';
-        problems.push(`${rule.field}: changing ${JSON.stringify(before)} to ${JSON.stringify(value)} needs --force${reason}`);
-      }
+      problems.push(...immutableProblems(rule, before, value));
     }
   }
   return problems;
+}
+
+const mapNamedBy = (rule, map) => (rule['key-of'] === '.' ? map : rule['key-of']);
+
+const listed = (value) => (Array.isArray(value) ? value : [value]);
+
+function namedProblems(rule, value, { schema, data, map, key }) {
+  const targetMap = mapNamedBy(rule, map);
+  const targets = data[targetMap] ?? {};
+  return listed(value).flatMap((name) => {
+    if (targetMap === map && name === key) return [`${rule.field}: ${key} cannot name itself`];
+    if (!Object.hasOwn(targets, name)) return [`${rule.field}: ${name} is not an entry of ${targetMap}, create it first`];
+    return targetProblems(rule, name, targets[name], defaultsOf(schema, data, targetMap));
+  });
+}
+
+function targetProblems(rule, name, target, defaults) {
+  return Object.entries(rule['target-must'] ?? {}).flatMap(([field, expected]) => {
+    const actual = effective(target, defaults, field);
+    return same(actual, expected) ? [] : [`${rule.field}: ${name} must have ${field}: ${JSON.stringify(expected)}, it has ${JSON.stringify(actual)}`];
+  });
+}
+
+function immutableProblems(rule, before, value) {
+  if (same(before, value)) return [];
+  const reason = typeof rule.immutable === 'string' ? `, ${rule.immutable}` : '';
+  return [`${rule.field}: changing ${JSON.stringify(before)} to ${JSON.stringify(value)} needs --force${reason}`];
 }
 
 // The entries still naming one about to be deleted, since deleting it would leave each of them pointing at nothing.
@@ -76,15 +79,10 @@ export function referencesTo({ schema, data, map, key }) {
   const found = [];
   for (const other of schema.entryMaps()) {
     const defaults = defaultsOf(schema, data, other);
-    for (const rule of fieldRules(schema, other)) {
-      if (!rule['key-of']) continue;
-      const targetMap = rule['key-of'] === '.' ? other : rule['key-of'];
-      if (targetMap !== map) continue;
-      for (const [name, entry] of Object.entries(data[other] ?? {})) {
-        if (other === map && name === key) continue;
-        const value = effective(entry, defaults, rule.field);
-        if ((Array.isArray(value) ? value : [value]).includes(key)) found.push(`${other}/${name}`);
-      }
+    const rules = fieldRules(schema, other).filter((rule) => rule['key-of'] && mapNamedBy(rule, other) === map);
+    for (const rule of rules) {
+      const naming = Object.entries(data[other] ?? {}).filter(([name, entry]) => !(other === map && name === key) && listed(effective(entry, defaults, rule.field)).includes(key));
+      found.push(...naming.map(([name]) => `${other}/${name}`));
     }
   }
   return found;

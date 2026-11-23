@@ -297,3 +297,8 @@ test('a field path goes into list items only when asked, and says it did', () =>
   assert.equal(through.crossed, true);
   assert.equal(schema.field(entry, ['name']).crossed, false);
 });
+
+test('a pointer leading to no schema is refused, not taken for a schema allowing everything', () => {
+  const schema = new Schema({ type: 'object' });
+  assert.throws(() => schema.validate('#/definitions/none', {}, 'x'), { message: 'cannot compile the schema at yamlctl:/inline#/definitions/none' });
+});

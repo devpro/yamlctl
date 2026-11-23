@@ -9,7 +9,8 @@ export function explain(schema, map, segments) {
   const { schema: node, pointer } = here;
   const lines = [];
 
-  lines.push(`${segments.length ? `FIELD:  ${segments.join('.')}` : `RESOURCE:  ${map}`} <${describeType(schema, pointer, node)}>`);
+  const subject = segments.length ? `FIELD:  ${segments.join('.')}` : `RESOURCE:  ${map}`;
+  lines.push(`${subject} <${describeType(schema, pointer, node)}>`);
   if (node.description) lines.push('', 'DESCRIPTION:', ...node.description.split('\n').map((line) => `  ${line}`));
   const values = node.enum ?? node.items?.enum;
   if (values) lines.push('', 'VALUES:', `  ${values.filter((v) => v !== null).map((v) => JSON.stringify(v)).join(', ')}`);
@@ -27,7 +28,10 @@ export function explain(schema, map, segments) {
     const nameWidth = Math.max(...rows.map(([name]) => name.length));
     const typeWidth = Math.max(...rows.map(([, type]) => type.length));
     lines.push('', 'FIELDS:');
-    for (const [name, type, summary] of rows) lines.push(`  ${name.padEnd(nameWidth)}  ${summary ? `${type.padEnd(typeWidth)}  ${summary}` : type}`);
+    for (const [name, type, summary] of rows) {
+      const described = summary ? `${type.padEnd(typeWidth)}  ${summary}` : type;
+      lines.push(`  ${name.padEnd(nameWidth)}  ${described}`);
+    }
   }
   return `${lines.join('\n')}\n`;
 }
@@ -54,7 +58,7 @@ function describeType(schema, pointer, node) {
     const items = schema.unwrap(`${pointer}/items`).schema;
     if (items.properties) return '[]object';
     if (items.enum) return '[]enum';
-    return `[]${types(items).filter((type) => type !== 'null')[0] ?? 'any'}`;
+    return `[]${types(items).find((type) => type !== 'null') ?? 'any'}`;
   }
   if (node.enum) return 'enum';
   return kinds.join('|') || 'any';

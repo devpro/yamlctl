@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { existsSync, readdirSync, utimesSync } from 'node:fs';
 import { join } from 'node:path';
 import { main } from '../src/cli.js';
-import { forget } from '../src/store.js';
+import { forget, hasDocument, prefetch } from '../src/store.js';
 import { emptyDir, read, write } from './helpers.js';
 
 // A real server rather than a stubbed fetch, so the requests counted are the ones the command actually makes over HTTP.
@@ -236,6 +236,55 @@ test('a usage error is reported before anything is fetched', async () => {
   assert.equal(code, 1);
   assert.match(err, /unknown option --nope/);
   assert.equal(hits.size, 0);
+});
+
+// A server answering each path with its document after its delay, and counting the requests it holds at once.
+async function slowServer(answers, use) {
+  const state = { open: 0, peak: 0, hits: new Map() };
+  const slow = createServer((request, response) => {
+    state.open += 1;
+    state.peak = Math.max(state.peak, state.open);
+    state.hits.set(request.url, (state.hits.get(request.url) ?? 0) + 1);
+    const { delay, document } = answers[request.url];
+    setTimeout(() => {
+      state.open -= 1;
+      response.writeHead(document ? 200 : 404).end(JSON.stringify(document));
+    }, delay);
+  });
+  await new Promise((resolve) => slow.listen(0, '127.0.0.1', resolve));
+  try {
+    await use(`http://127.0.0.1:${slow.address().port}`, state);
+  } finally {
+    slow.closeAllConnections();
+    slow.close();
+  }
+}
+
+test('the documents a schema references are fetched together, so many of them take the time of one', async () => {
+  const names = Array.from({ length: 10 }, (_, i) => `/part${i}.json`);
+  const answers = { '/root.json': { delay: 0, document: { parts: names.map(($ref) => ({ $ref })) } } };
+  for (const name of names) answers[name] = { delay: 200, document: { back: { $ref: '/root.json' }, shared: { $ref: '/shared.json' } } };
+  answers['/shared.json'] = { delay: 0, document: {} };
+  await slowServer(answers, async (address, state) => {
+    await prefetch([`${address}/root.json`], { env: { YAMLCTL_CACHE_DIR: emptyDir() } });
+    assert.equal(state.peak, 10);
+    assert.deepEqual([...state.hits.values()], Array(12).fill(1));
+    assert.equal(hasDocument(`${address}/shared.json`), true);
+  });
+});
+
+test('the warnings of documents fetched together come in the order they are referenced, whichever fails first', async () => {
+  const names = ['/slow.json', '/medium.json', '/quick.json'];
+  const answers = { '/root.json': { delay: 0, document: { parts: names.map(($ref) => ({ $ref })) } } };
+  names.forEach((name, i) => (answers[name] = { delay: 100 - 50 * i, document: {} }));
+  await slowServer(answers, async (address) => {
+    const env = { YAMLCTL_CACHE_DIR: emptyDir() };
+    const warnings = [];
+    await prefetch([`${address}/root.json`], { env });
+    for (const name of names) answers[name].document = null;
+    await prefetch([`${address}/root.json`], { env, refresh: true, warn: (text) => warnings.push(text) });
+    assert.deepEqual(warnings, names.map((name) => `${address}${name} could not be fetched (HTTP 404), using the copy cached 0 hours ago`));
+  });
 });
 
 function ageCache(env, days) {

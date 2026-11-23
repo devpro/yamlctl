@@ -805,3 +805,62 @@ test('apply through a list says the list is set whole, rather than that the fiel
   assert.equal(code, 1);
   assert.equal(err, `error: account_links.account: goes into a list, which is set whole as JSON: account_links='[...]'\n`);
 });
+
+// --- names JavaScript gives a meaning of its own
+
+test('a field path through __proto__ is refused, and no other object sees the value', () => {
+  const dir = workspace();
+  const before = read(dir, 'servers.yml');
+  const { code, err } = cli(dir, ['servers', 'patch', 'web', '__proto__.polluted=1']);
+  const polluted = Object.hasOwn(Object.prototype, 'polluted');
+  // Removed whatever the result, since every test after this one runs in the same process.
+  delete Object.prototype.polluted;
+  assert.equal(polluted, false);
+  assert.equal(code, 1);
+  assert.match(err, /error: __proto__\.polluted: __proto__ is not a field name\n$/);
+  assert.equal(read(dir, 'servers.yml'), before);
+  assert.match(cli(dir, ['servers', 'patch', 'web', 'a.__proto__=1']).err, /error: a\.__proto__: __proto__ is not a field name\n$/);
+});
+
+test('an entry keyed __proto__ is refused rather than written unchecked', () => {
+  const dir = workspace();
+  const before = read(dir, 'servers.yml');
+  for (const verb of ['create', 'apply', 'patch']) {
+    assert.match(cli(dir, ['servers', verb, '__proto__', 'port=1']).err, /error: __proto__ is not an entry key\n$/);
+  }
+  assert.match(cli(dir, ['servers', 'apply', '-f', '-'], { stdin: '__proto__:\n  port: 1\n' }).err, /error: standard input: __proto__ is not an entry key\n$/);
+  assert.equal(read(dir, 'servers.yml'), before);
+});
+
+test('a __proto__ field in a file given with -f is refused wherever it is, rather than dropped', () => {
+  const dir = workspace();
+  const before = read(dir, 'servers.yml');
+  for (const stdin of ['web:\n  __proto__:\n    port: 1\n', 'web:\n  a:\n    __proto__: 1\n', 'web:\n  a:\n    - __proto__: 1\n']) {
+    for (const verb of ['apply', 'replace']) {
+      const { code, err } = cli(dir, ['servers', verb, '-f', '-'], { stdin });
+      assert.equal(code, 1);
+      assert.match(err, /error: standard input: web: __proto__ is not a field name\n$/);
+    }
+  }
+  assert.equal(read(dir, 'servers.yml'), before);
+});
+
+test('an option taking no value refuses one, rather than reading it as a word', () => {
+  for (const flag of ['--force', '--ignore-not-found', '--prune', '--all', '--offline', '--refresh', '--help', '--version']) {
+    assert.throws(() => parseArgs(['projects', 'delete', `${flag}=false`]), { message: `${flag} takes no value` });
+  }
+  const { code, err } = cli(workspace(), ['servers', 'delete', '--ignore-not-found=true', 'nope']);
+  assert.equal(code, 1);
+  assert.equal(err, 'error: --ignore-not-found takes no value\nRun yamlctl --help for the usage.\n');
+});
+
+test('apply is unchanged by the order of the fields, at any depth and whatever their names', () => {
+  const dir = workspace();
+  // The last two names are canonically equivalent, which a comparison by locale takes for equal.
+  write(dir, 'servers.yml', 'servers:\n  web:\n    port: 80\n    list:\n      - b: 1\n        a: 2\n    \u00e9: 1\n    e\u0301: 2\n');
+  const before = read(dir, 'servers.yml');
+  const { code, out } = cli(dir, ['servers', 'replace', '-f', '-'], { stdin: 'web:\n  e\u0301: 2\n  \u00e9: 1\n  list:\n    - a: 2\n      b: 1\n  port: 80\n' });
+  assert.equal(code, 0);
+  assert.equal(out, 'servers/web replaced (no change)\n');
+  assert.equal(read(dir, 'servers.yml'), before);
+});
