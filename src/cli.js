@@ -82,8 +82,10 @@ const WRITES = {
 };
 const VERBS = 'list, get, create, apply, patch, replace, delete, explain or check';
 
-// Refused a value rather than ignoring it, since `--force=false` would otherwise force.
+// The options taking no value, which refuse one rather than ignoring it, since `--force=false` would otherwise force.
 const FLAGS = { '--force': 'force', '--ignore-not-found': 'ignoreNotFound', '--prune': 'prune', '--all': 'all', '--offline': 'offline', '--refresh': 'refresh', '-h': 'help', '--help': 'help', '-v': 'version', '--version': 'version' };
+
+const VALUES = { '-C': 'dir', '--dir': 'dir', '--data-file': 'dataFile', '-o': 'output', '--output': 'output', '-f': 'filename', '--filename': 'filename', '--prefix': 'prefix' };
 
 // Options may come anywhere, before or after the resource, so `yamlctl -C data projects list` and `yamlctl projects list -C data` read the same.
 export function parseArgs(argv) {
@@ -91,27 +93,25 @@ export function parseArgs(argv) {
   const words = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
-    const value = () => {
+    if (Object.hasOwn(FLAGS, arg)) options[FLAGS[arg]] = true;
+    else if (Object.hasOwn(VALUES, arg)) {
       if (i + 1 >= argv.length) throw new UsageError(`${arg} needs a value`);
-      return argv[++i];
-    };
-    if (arg === '-C' || arg === '--dir') options.dir = value();
-    else if (arg === '--data-file') options.dataFile = value();
-    else if (arg === '-o' || arg === '--output') options.output = value();
-    else if (arg === '-f' || arg === '--filename') options.filename = value();
-    else if (arg === '--prefix') options.prefix = value();
-    else if (Object.hasOwn(FLAGS, arg)) options[FLAGS[arg]] = true;
-    else if (arg.startsWith('--') && arg.includes('=')) {
-      const [flag, ...rest] = arg.split('=');
-      if (Object.hasOwn(FLAGS, flag)) throw new UsageError(`${flag} takes no value`);
-      argv.splice(i + 1, 0, rest.join('='));
-      argv[i] = flag;
+      options[VALUES[arg]] = argv[++i];
+    } else if (arg.startsWith('--') && arg.includes('=')) {
+      argv.splice(i, 1, ...splitOption(arg));
       i--;
     } else if (arg.startsWith('-') && arg !== '-' && !arg.includes('=')) throw new UsageError(`unknown option ${arg}`);
     else words.push(arg);
   }
   if (options.output && !['yaml', 'json', 'name'].includes(options.output)) throw new UsageError(`-o takes yaml, json or name, not ${options.output}`);
   return { options, words };
+}
+
+// `--option=value` as the option and its value.
+function splitOption(arg) {
+  const [flag, ...rest] = arg.split('=');
+  if (Object.hasOwn(FLAGS, flag)) throw new UsageError(`${flag} takes no value`);
+  return [flag, rest.join('=')];
 }
 
 // The schemas the command can reach are fetched first, the only step needing the network, so everything after it runs synchronously from what was fetched.
@@ -190,22 +190,28 @@ export function run(argv, { out = (text) => process.stdout.write(text), err = (t
     if (words[0] === 'check' && words.length === 1) return checkDirectory(needNoOutput(context, 'check'));
     if (words.length < 2) throw new UsageError(`${words[0]} needs a verb: ${VERBS}`);
 
-    const [name, verb, ...args] = words;
-    const target = resolveResource({ dir, name, file });
-    // A file naming a schema that cannot be loaded is not written: checking nothing where the file asked for a check is the one outcome worse than stopping.
-    if (target.schemaError && (Object.hasOwn(WRITES, verb) || verb === 'delete')) throw new Error(`${display(target.file, cwd)} ${target.schemaError}, so it is not written`);
-    if (target.schemaError) err(`warning: ${display(target.file, cwd)} ${target.schemaError}, so nothing is checked\n`);
-    else if (!target.schema) err(`warning: no schema found for ${display(target.file, cwd)}, so nothing is checked\n`);
-    if (Object.hasOwn(WRITES, verb)) return write(verb, { ...context, name, target, args });
-    const commands = { list, get, delete: remove, explain: (c) => explainCommand(needNoOutput(c, 'explain')), check: (c) => checkResource(needNoOutput(c, 'check')) };
-    if (!Object.hasOwn(commands, verb)) throw new UsageError(`unknown verb ${verb}, use ${VERBS}`);
-    return commands[verb]({ ...context, name, target, args });
+    return runVerb(context, words);
   } catch (e) {
-    err(`error: ${e instanceof Error ? e.message : String(e)}\n`);
+    err(`error: ${reason(e)}\n`);
     if (e instanceof UsageError) err(`Run yamlctl --help for the usage.\n`);
     return 1;
   }
 }
+
+function runVerb(context, [name, verb, ...args]) {
+  const { dir, file, err, cwd } = context;
+  const target = resolveResource({ dir, name, file });
+  // A file naming a schema that cannot be loaded is not written: checking nothing where the file asked for a check is the one outcome worse than stopping.
+  if (target.schemaError && (Object.hasOwn(WRITES, verb) || verb === 'delete')) throw new Error(`${display(target.file, cwd)} ${target.schemaError}, so it is not written`);
+  if (target.schemaError) err(`warning: ${display(target.file, cwd)} ${target.schemaError}, so nothing is checked\n`);
+  else if (!target.schema) err(`warning: no schema found for ${display(target.file, cwd)}, so nothing is checked\n`);
+  if (Object.hasOwn(WRITES, verb)) return write(verb, { ...context, name, target, args });
+  const commands = { list, get, delete: remove, explain: (c) => explainCommand(needNoOutput(c, 'explain')), check: (c) => checkResource(needNoOutput(c, 'check')) };
+  if (!Object.hasOwn(commands, verb)) throw new UsageError(`unknown verb ${verb}, use ${VERBS}`);
+  return commands[verb]({ ...context, name, target, args });
+}
+
+const reason = (e) => (e instanceof Error ? e.message : String(e));
 
 // Pruning deletes what the file does not hold, so it is refused without a scope saying which entries it may delete, as kubectl refuses it without a selector or --all.
 function checkPrune(options, verb) {
@@ -294,77 +300,100 @@ const REPLACE_USAGE = 'replace takes -f <file> only, patch takes <key> <field>=<
 
 // Every entry the command writes is checked against the file as it will be, and the file is written once, or not at all when one of them fails.
 function write(verb, context) {
-  const { target, name, args, options, out, err, cwd } = context;
-  const rules = WRITES[verb];
-  const { map } = target;
-  const { document, schema } = target;
+  const { target, options } = context;
+  const { map, document } = target;
   const entries = document.data[map] ?? {};
-  let changes;
-
-  if (options.filename) {
-    if (!rules.filename) throw new UsageError('patch takes <key> <field>=<value>..., replace takes -f <file>');
-    if (args.length) throw new UsageError(verb === 'replace' ? REPLACE_USAGE : `${verb} takes -f <file> without a key`);
-    const given = readEntries(options.filename, context);
-    refuseProto(given, options.filename === '-' ? 'standard input' : options.filename);
-    changes = Object.entries(given).map(([key, entry]) => ({ key, entry: verb === 'apply' ? mergePatch(entries[key], entry) : entry }));
-  } else {
-    if (!rules.fields) throw new UsageError(REPLACE_USAGE);
-    const key = needKey(args, verb, rules.filename);
-    if (key === '__proto__') throw new Error('__proto__ is not an entry key');
-    const assignments = args.slice(1);
-    if (!assignments.length) throw new UsageError(`${verb} needs at least one <field>=<value>${rules.filename ? ', or -f <file>' : ''}`);
-    const base = isObject(entries[key]) ? entries[key] : {};
-    changes = [{ key, entry: assign(structuredClone(base), assignments, { schema, map, name }) }];
-  }
-
-  for (const { key } of changes) {
-    const exists = Object.hasOwn(entries, key);
-    if (rules.exists === false && exists) throw new Error(`${map}/${key} already exists, use apply, patch or replace to change it`);
-    if (rules.exists === true && !exists) throw new Error(`no entry ${key} in ${map}`);
-  }
+  const changes = options.filename ? changesFromFile(verb, entries, context) : changesFromFields(verb, entries, context);
+  checkExistence(WRITES[verb], map, entries, changes);
 
   const next = { ...document.data, [map]: { ...entries } };
   for (const { key, entry } of changes) next[map][key] = entry;
-  let pruned = [];
-  if (options.prune) {
-    const owned = (key) => options.all || key.startsWith(options.prefix);
-    const outside = changes.find(({ key }) => !owned(key));
-    if (outside) throw new Error(`${options.filename === '-' ? 'standard input' : options.filename} holds ${outside.key}, outside the prefix ${options.prefix} it prunes`);
-    pruned = Object.keys(entries).filter((key) => owned(key) && !changes.some((change) => change.key === key));
-    for (const key of pruned) delete next[map][key];
-  }
-  const problems = [];
-  for (const { key, entry } of changes) {
-    if (schema) problems.push(...schema.validate(schema.entryPointer(map), entry, `${map}/${key}`));
-    problems.push(...checkSet({ schema, data: next, previous: document.data, map, key, entry, force: options.force }).map((problem) => `${map}/${key}: ${problem}`));
-  }
-  if (problems.length) {
-    for (const problem of problems) err(`${problem}\n`);
-    const subject = options.filename ? display(target.file, cwd) : `${map}/${changes[0].key}`;
-    throw new Error(`${subject} not written`);
-  }
-  for (const key of pruned) {
-    const referencing = referencesTo({ schema, data: next, map, key });
-    if (referencing.length) throw new Error(`${map}/${key} is still named by ${referencing.join(', ')}: delete or change them first`);
-  }
+  const pruned = options.prune ? prunedKeys(entries, changes, options) : [];
+  for (const key of pruned) delete next[map][key];
+  checkChanges(changes, next, context);
+  refuseReferenced(target, next, pruned);
 
   const lines = [];
   for (const { key, entry } of changes) {
     const existed = Object.hasOwn(entries, key);
     const changed = !existed || !sameData(entries[key], entry);
     if (changed) setEntry(document, map, key, entry);
-    lines.push(`${map}/${key} ${rules.done(existed, changed)}\n`);
+    lines.push(`${map}/${key} ${WRITES[verb].done(existed, changed)}\n`);
   }
   for (const key of pruned) {
     deleteEntry(document, map, key);
     lines.push(`${map}/${key} pruned\n`);
   }
   writeDocument(document);
-  // A pipeline reads the entries or their paths rather than a sentence, and -o name keeps the entries pruned, since they are part of what was done.
-  if (options.output === 'name') for (const key of [...changes.map((change) => change.key), ...pruned]) out(`${map}/${key}\n`);
+  printWritten(changes, pruned, lines, context);
+  return 0;
+}
+
+const sourceName = (filename) => (filename === '-' ? 'standard input' : filename);
+
+// The entries to write, each under its key as it will be in the file.
+function changesFromFile(verb, entries, context) {
+  const { args, options } = context;
+  if (!WRITES[verb].filename) throw new UsageError('patch takes <key> <field>=<value>..., replace takes -f <file>');
+  if (args.length) throw new UsageError(verb === 'replace' ? REPLACE_USAGE : `${verb} takes -f <file> without a key`);
+  const given = readEntries(options.filename, context);
+  refuseProto(given, sourceName(options.filename));
+  return Object.entries(given).map(([key, entry]) => ({ key, entry: verb === 'apply' ? mergePatch(entries[key], entry) : entry }));
+}
+
+function changesFromFields(verb, entries, { target, name, args }) {
+  const rules = WRITES[verb];
+  if (!rules.fields) throw new UsageError(REPLACE_USAGE);
+  const key = needKey(args, verb, rules.filename);
+  if (key === '__proto__') throw new Error('__proto__ is not an entry key');
+  const assignments = args.slice(1);
+  if (!assignments.length) throw new UsageError(`${verb} needs at least one <field>=<value>${rules.filename ? ', or -f <file>' : ''}`);
+  const base = isObject(entries[key]) ? entries[key] : {};
+  return [{ key, entry: assign(structuredClone(base), assignments, { schema: target.schema, map: target.map, name }) }];
+}
+
+function checkExistence(rules, map, entries, changes) {
+  for (const { key } of changes) {
+    const exists = Object.hasOwn(entries, key);
+    if (rules.exists === false && exists) throw new Error(`${map}/${key} already exists, use apply, patch or replace to change it`);
+    if (rules.exists === true && !exists) throw new Error(`no entry ${key} in ${map}`);
+  }
+}
+
+// The keys of the entries --prune deletes: those within its scope that the file does not hold.
+function prunedKeys(entries, changes, options) {
+  const owned = (key) => options.all || key.startsWith(options.prefix);
+  const outside = changes.find(({ key }) => !owned(key));
+  if (outside) throw new Error(`${sourceName(options.filename)} holds ${outside.key}, outside the prefix ${options.prefix} it prunes`);
+  return Object.keys(entries).filter((key) => owned(key) && !changes.some((change) => change.key === key));
+}
+
+function checkChanges(changes, next, { target, options, err, cwd }) {
+  const { map, document, schema } = target;
+  const problems = [];
+  for (const { key, entry } of changes) {
+    if (schema) problems.push(...schema.validate(schema.entryPointer(map), entry, `${map}/${key}`));
+    problems.push(...checkSet({ schema, data: next, previous: document.data, map, key, entry, force: options.force }).map((problem) => `${map}/${key}: ${problem}`));
+  }
+  if (!problems.length) return;
+  for (const problem of problems) err(`${problem}\n`);
+  const subject = options.filename ? display(target.file, cwd) : `${map}/${changes[0].key}`;
+  throw new Error(`${subject} not written`);
+}
+
+// `next` is the file as it will be, so an entry deleted along with every entry naming it is not refused.
+function refuseReferenced({ schema, map }, next, keys) {
+  for (const key of keys) {
+    const referencing = referencesTo({ schema, data: next, map, key });
+    if (referencing.length) throw new Error(`${map}/${key} is still named by ${referencing.join(', ')}: delete or change them first`);
+  }
+}
+
+// A pipeline reads the entries or their paths rather than a sentence, and -o name keeps the entries pruned, since they are part of what was done.
+function printWritten(changes, pruned, lines, { target, options, out }) {
+  if (options.output === 'name') for (const key of [...changes.map((change) => change.key), ...pruned]) out(`${target.map}/${key}\n`);
   else if (options.output) printData(Object.fromEntries(changes.map(({ key, entry }) => [key, entry])), options.output, out);
   else for (const line of lines) out(line);
-  return 0;
 }
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -402,23 +431,23 @@ function mergePatch(target, patch) {
   return result;
 }
 
+function readGiven(filename, cwd) {
+  try {
+    return readFileSync(resolve(cwd, filename), 'utf8');
+  } catch (e) {
+    throw new Error(`cannot read ${filename}: ${reason(e)}`);
+  }
+}
+
 // The entries an -f file holds by key, the shape get and list -o yaml print, each one an object.
 function readEntries(filename, { stdin, cwd }) {
-  const source = filename === '-' ? 'standard input' : filename;
-  let text;
-  if (filename === '-') text = stdin();
-  else {
-    try {
-      text = readFileSync(resolve(cwd, filename), 'utf8');
-    } catch (e) {
-      throw new Error(`cannot read ${filename}: ${e instanceof Error ? e.message : String(e)}`);
-    }
-  }
+  const source = sourceName(filename);
+  const text = filename === '-' ? stdin() : readGiven(filename, cwd);
   let entries;
   try {
     entries = parse(text);
   } catch (e) {
-    throw new Error(`${source} is not valid YAML: ${e instanceof Error ? e.message : String(e)}`);
+    throw new Error(`${source} is not valid YAML: ${reason(e)}`);
   }
   if (entries === null || entries === undefined) throw new Error(`${source} holds no entries`);
   if (!isObject(entries)) throw new Error(`${source} does not hold entries by key`);
@@ -445,23 +474,27 @@ function assign(entry, assignments, { schema, map, name }) {
       if (schema.field(entryPointer, segments, { throughLists: true })) throw new Error(`${path}: goes into a list, which is set whole as JSON: ${segments[0]}='[...]'`);
       throw new Error(`${path}: no such field in ${map}, run yamlctl ${name} explain to list them`);
     }
-    let parent = entry;
-    for (const segment of segments.slice(0, -1)) {
-      if (!isObject(parent[segment])) parent[segment] = {};
-      parent = parent[segment];
-    }
-    const last = segments.at(-1);
-    if (text === '') {
-      delete parent[last];
-      continue;
-    }
-    try {
-      parent[last] = field ? typedValue(field.schema, text) : parseLoose(text);
-    } catch (e) {
-      throw new Error(`${path}: ${e instanceof Error ? e.message : String(e)}`);
-    }
+    setField(entry, segments, field, text);
   }
   return entry;
+}
+
+function setField(entry, segments, field, text) {
+  let parent = entry;
+  for (const segment of segments.slice(0, -1)) {
+    if (!isObject(parent[segment])) parent[segment] = {};
+    parent = parent[segment];
+  }
+  const last = segments.at(-1);
+  if (text === '') {
+    delete parent[last];
+    return;
+  }
+  try {
+    parent[last] = field ? typedValue(field.schema, text) : parseLoose(text);
+  } catch (e) {
+    throw new Error(`${segments.join('.')}: ${reason(e)}`);
+  }
 }
 
 // Without a schema a value is read the way YAML would read it, so a number or a list typed on the command line keeps its type.
@@ -474,34 +507,33 @@ function parseLoose(text) {
 }
 
 function remove(context) {
-  const { target, args, options, out } = context;
+  const { target, options, out } = context;
   if (options.output && options.output !== 'name') throw new UsageError('delete takes -o name only');
   const { map } = target;
-  let keys;
-  if (options.filename) {
-    if (args.length) throw new UsageError('delete takes -f <file> without a key');
-    keys = Object.keys(readEntries(options.filename, context));
-  } else {
-    needKey(args, 'delete', true);
-    keys = [...new Set(args)];
-  }
-  const { document, schema } = target;
+  const keys = keysToDelete(context);
+  const { document } = target;
   const entries = document.data[map] ?? {};
   const present = [];
   for (const key of keys) {
     if (Object.hasOwn(entries, key)) present.push(key);
     else if (!options.ignoreNotFound) throw new Error(`no entry ${key} in ${map}`);
   }
-  // Checked against the file as it will be, so an entry deleted along with every entry naming it is not refused.
   const next = { ...document.data, [map]: Object.fromEntries(Object.entries(entries).filter(([key]) => !present.includes(key))) };
-  for (const key of present) {
-    const referencing = referencesTo({ schema, data: next, map, key });
-    if (referencing.length) throw new Error(`${map}/${key} is still named by ${referencing.join(', ')}: delete or change them first`);
-  }
+  refuseReferenced(target, next, present);
   for (const key of present) deleteEntry(document, map, key);
   writeDocument(document);
   for (const key of present) out(options.output === 'name' ? `${map}/${key}\n` : `${map}/${key} deleted\n`);
   return 0;
+}
+
+function keysToDelete(context) {
+  const { args, options } = context;
+  if (options.filename) {
+    if (args.length) throw new UsageError('delete takes -f <file> without a key');
+    return Object.keys(readEntries(options.filename, context));
+  }
+  needKey(args, 'delete', true);
+  return [...new Set(args)];
 }
 
 function explainCommand({ target, args, out }) {
@@ -550,7 +582,7 @@ function checkDirectory(context) {
     try {
       opened = openFile(path);
     } catch (e) {
-      context.err(`${display(path, context.cwd)}: ${e instanceof Error ? e.message : String(e)}\n`);
+      context.err(`${display(path, context.cwd)}: ${reason(e)}\n`);
       ok = false;
       continue;
     }

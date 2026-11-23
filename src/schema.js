@@ -210,14 +210,7 @@ export class Schema {
   // ajv reports every branch, which reads as contradictions: a job told both to add `uses` and to drop `steps`.
   validate(pointer, value, prefix, depth = 0) {
     const full = this.absolute(pointer).replace(/#$/, '');
-    let check;
-    try {
-      check = this.ajv.getSchema(full);
-    } catch (e) {
-      const reason = e instanceof Error ? e.message : String(e);
-      throw new Error(this.missing.length ? `the schema cannot be applied, ${this.missing.map(displayUri).join(', ')} could not be loaded (${reason})` : `the schema cannot be applied: ${reason}`);
-    }
-    if (!check) throw new Error(`cannot compile the schema at ${full}`);
+    const check = this.compiled(full);
     if (check(value)) return [];
     // A branch allowing null never explains anything, since the value is not null.
     let errors = (check.errors ?? []).filter((error) => !(error.keyword === 'type' && [error.params.type].flat().join() === 'null'));
@@ -243,6 +236,18 @@ export class Schema {
     }
     errors = errors.filter((error) => !handled.some((path) => within(error.instancePath, path)));
     return [...new Set([...formatErrors(errors, prefix), ...closest])];
+  }
+
+  compiled(full) {
+    let check;
+    try {
+      check = this.ajv.getSchema(full);
+    } catch (e) {
+      const reason = e instanceof Error ? e.message : String(e);
+      throw new Error(this.missing.length ? `the schema cannot be applied, ${this.missing.map(displayUri).join(', ')} could not be loaded (${reason})` : `the schema cannot be applied: ${reason}`);
+    }
+    if (!check) throw new Error(`cannot compile the schema at ${full}`);
+    return check;
   }
 
   // The branches of the alternative an error reports, each as the pointer to validate and the value it applies to, or null when the alternative cannot be located.
