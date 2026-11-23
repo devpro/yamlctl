@@ -70,15 +70,20 @@ Examples:
 
 class UsageError extends Error {}
 
+const configured = (changed) => (changed ? 'configured' : 'unchanged');
+
 // The verbs writing an entry, named and behaving as kubectl's do, so someone who knows one knows the other.
 // `exists` is what the entry must be beforehand, `fields` and `filename` the input each takes, and `done` what the output says.
 const WRITES = {
   create: { exists: false, fields: true, filename: true, done: () => 'created' },
-  apply: { exists: null, fields: true, filename: true, done: (existed, changed) => (!existed ? 'created' : changed ? 'configured' : 'unchanged') },
+  apply: { exists: null, fields: true, filename: true, done: (existed, changed) => (existed ? configured(changed) : 'created') },
   patch: { exists: true, fields: true, filename: false, done: (existed, changed) => (changed ? 'patched' : 'patched (no change)') },
   replace: { exists: true, fields: false, filename: true, done: (existed, changed) => (changed ? 'replaced' : 'replaced (no change)') },
 };
 const VERBS = 'list, get, create, apply, patch, replace, delete, explain or check';
+
+// Refused a value rather than ignoring it, since `--force=false` would otherwise force.
+const FLAGS = { '--force': 'force', '--ignore-not-found': 'ignoreNotFound', '--prune': 'prune', '--all': 'all', '--offline': 'offline', '--refresh': 'refresh', '-h': 'help', '--help': 'help', '-v': 'version', '--version': 'version' };
 
 // Options may come anywhere, before or after the resource, so `yamlctl -C data projects list` and `yamlctl projects list -C data` read the same.
 export function parseArgs(argv) {
@@ -94,17 +99,11 @@ export function parseArgs(argv) {
     else if (arg === '--data-file') options.dataFile = value();
     else if (arg === '-o' || arg === '--output') options.output = value();
     else if (arg === '-f' || arg === '--filename') options.filename = value();
-    else if (arg === '--force') options.force = true;
-    else if (arg === '--ignore-not-found') options.ignoreNotFound = true;
-    else if (arg === '--prune') options.prune = true;
-    else if (arg === '--all') options.all = true;
     else if (arg === '--prefix') options.prefix = value();
-    else if (arg === '--offline') options.offline = true;
-    else if (arg === '--refresh') options.refresh = true;
-    else if (arg === '-h' || arg === '--help') options.help = true;
-    else if (arg === '-v' || arg === '--version') options.version = true;
+    else if (Object.hasOwn(FLAGS, arg)) options[FLAGS[arg]] = true;
     else if (arg.startsWith('--') && arg.includes('=')) {
       const [flag, ...rest] = arg.split('=');
+      if (Object.hasOwn(FLAGS, flag)) throw new UsageError(`${flag} takes no value`);
       argv.splice(i + 1, 0, rest.join('='));
       argv[i] = flag;
       i--;
@@ -251,7 +250,8 @@ function resources({ dir, options, out, cwd }) {
     printData(found.map((r) => ({ ...r, file: display(r.file, cwd), schema: r.schema ? display(r.schema, cwd) : null })), options.output, out);
     return 0;
   }
-  const rows = found.map((r) => [r.name ?? '-', display(r.file, cwd), r.entries ?? '-', r.error ? `error: ${r.error}` : r.schema ? display(r.schema, cwd) : '-']);
+  const schemaOf = (r) => (r.schema ? display(r.schema, cwd) : '-');
+  const rows = found.map((r) => [r.name ?? '-', display(r.file, cwd), r.entries ?? '-', r.error ? `error: ${r.error}` : schemaOf(r)]);
   out(table(['RESOURCE', 'FILE', 'ENTRIES', 'SCHEMA'], rows));
   return 0;
 }
@@ -305,10 +305,12 @@ function write(verb, context) {
     if (!rules.filename) throw new UsageError('patch takes <key> <field>=<value>..., replace takes -f <file>');
     if (args.length) throw new UsageError(verb === 'replace' ? REPLACE_USAGE : `${verb} takes -f <file> without a key`);
     const given = readEntries(options.filename, context);
+    refuseProto(given, options.filename === '-' ? 'standard input' : options.filename);
     changes = Object.entries(given).map(([key, entry]) => ({ key, entry: verb === 'apply' ? mergePatch(entries[key], entry) : entry }));
   } else {
     if (!rules.fields) throw new UsageError(REPLACE_USAGE);
     const key = needKey(args, verb, rules.filename);
+    if (key === '__proto__') throw new Error('__proto__ is not an entry key');
     const assignments = args.slice(1);
     if (!assignments.length) throw new UsageError(`${verb} needs at least one <field>=<value>${rules.filename ? ', or -f <file>' : ''}`);
     const base = isObject(entries[key]) ? entries[key] : {};
@@ -338,7 +340,8 @@ function write(verb, context) {
   }
   if (problems.length) {
     for (const problem of problems) err(`${problem}\n`);
-    throw new Error(`${options.filename ? display(target.file, cwd) : `${map}/${changes[0].key}`} not written`);
+    const subject = options.filename ? display(target.file, cwd) : `${map}/${changes[0].key}`;
+    throw new Error(`${subject} not written`);
   }
   for (const key of pruned) {
     const referencing = referencesTo({ schema, data: next, map, key });
@@ -366,9 +369,24 @@ function write(verb, context) {
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 
+// JavaScript takes an assignment to `__proto__` for a change of prototype, which loses the value and, through a path, reaches every object of the process.
+function refuseProto(entries, source) {
+  if (Object.hasOwn(entries, '__proto__')) throw new Error(`${source}: __proto__ is not an entry key`);
+  const holds = (value) => value !== null && typeof value === 'object' && (Object.hasOwn(value, '__proto__') || Object.values(value).some(holds));
+  for (const [key, entry] of Object.entries(entries)) {
+    if (holds(entry)) throw new Error(`${source}: ${key}: __proto__ is not a field name`);
+  }
+}
+
 // Equal whatever the order of the fields, since an entry read from a file lists them in whatever order its author chose.
 function sameData(a, b) {
-  const canonical = (value) => (Array.isArray(value) ? value.map(canonical) : isObject(value) ? Object.fromEntries(Object.keys(value).sort().map((key) => [key, canonical(value[key])])) : value);
+  // By code unit, since a comparison by locale takes distinct keys for equal, and their order would then be the one of the file.
+  const byCodeUnit = (x, y) => (x < y ? -1 : 1);
+  const canonical = (value) => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (!isObject(value)) return value;
+    return Object.fromEntries(Object.keys(value).sort(byCodeUnit).map((key) => [key, canonical(value[key])]));
+  };
   return JSON.stringify(canonical(a ?? null)) === JSON.stringify(canonical(b ?? null));
 }
 
@@ -420,7 +438,8 @@ function assign(entry, assignments, { schema, map, name }) {
     const path = assignment.slice(0, at);
     const text = assignment.slice(at + 1);
     const segments = path.split('.');
-    if (segments.some((segment) => segment === '')) throw new UsageError(`${path} is not a field path`);
+    if (segments.includes('')) throw new UsageError(`${path} is not a field path`);
+    if (segments.includes('__proto__')) throw new Error(`${path}: __proto__ is not a field name`);
     const field = schema ? schema.field(entryPointer, segments) : null;
     if (schema && !field) {
       if (schema.field(entryPointer, segments, { throughLists: true })) throw new Error(`${path}: goes into a list, which is set whole as JSON: ${segments[0]}='[...]'`);
@@ -455,7 +474,7 @@ function parseLoose(text) {
 }
 
 function remove(context) {
-  const { target, name, args, options, out } = context;
+  const { target, args, options, out } = context;
   if (options.output && options.output !== 'name') throw new UsageError('delete takes -o name only');
   const { map } = target;
   let keys;
@@ -512,9 +531,11 @@ function report(opened, { out, err, cwd }) {
   }
   const problems = problemsOf(opened);
   for (const problem of problems) err(`${problem}\n`);
+  if (problems.length) return false;
   const entries = opened.maps.reduce((total, map) => total + Object.keys(opened.document.data[map] ?? {}).length, 0);
-  if (!problems.length) out(opened.maps.length ? `${where}: ${entries} ${entries === 1 ? 'entry' : 'entries'}, valid\n` : `${where}: valid\n`);
-  return !problems.length;
+  const counted = `${entries} ${entries === 1 ? 'entry' : 'entries'}, `;
+  out(`${where}: ${opened.maps.length ? counted : ''}valid\n`);
+  return true;
 }
 
 function checkResource(context) {

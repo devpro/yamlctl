@@ -1,6 +1,6 @@
 // A YAML data file read and written in place, so the entries yamlctl does not touch, the comments and the order of the file come back exactly as they were.
 import { readFileSync, writeFileSync } from 'node:fs';
-import { isMap, parseDocument } from 'yaml';
+import { isMap, isScalar, parseDocument } from 'yaml';
 
 export function readDocument(file) {
   let text;
@@ -25,7 +25,8 @@ export function render(doc) {
 // Written only when something changed, so running the same command twice leaves the file, and its modification time, alone.
 export function writeDocument(document) {
   const next = render(document.doc);
-  if (next === document.text) return false;
+  // A file laid out another way renders differently with nothing edited, so it is compared with its own rendering as well.
+  if (next === document.text || next === render(parseDocument(document.text))) return false;
   writeFileSync(document.file, next);
   return true;
 }
@@ -35,10 +36,23 @@ export function setEntry(document, map, key, entry) {
   // An empty map is usually written `{}`, and an entry added to it would stay on that one line, so the map becomes a block first.
   const node = doc.get(map, true);
   if (node && typeof node === 'object' && 'flow' in node) node.flow = false;
-  if (!node || node.items === undefined) doc.set(map, doc.createNode({}));
-  const current = doc.getIn([map, key], true);
+  if (node?.items === undefined) doc.set(map, doc.createNode({}));
+  const path = [map, keyIn(doc.get(map, true), key)];
+  const current = doc.getIn(path, true);
   if (isMap(current)) update(doc, current, entry);
-  else doc.setIn([map, key], doc.createNode(entry));
+  else doc.setIn(path, doc.createNode(entry));
+}
+
+// Spelled the way toJS spells it, an empty key included.
+function nameOf(pair) {
+  const key = isScalar(pair.key) ? pair.key.value : pair.key;
+  return key === null ? '' : String(key);
+}
+
+// The key of a map as its file holds it: YAML reads `80` and `true` as a number and a boolean, which the name of the field, a string, does not find.
+function keyIn(node, name) {
+  const items = isMap(node) ? node.items : [];
+  return items.find((pair) => nameOf(pair) === name)?.key ?? name;
 }
 
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
@@ -46,11 +60,11 @@ const isObject = (value) => value !== null && typeof value === 'object' && !Arra
 // An entry already in the file is changed field by field rather than rebuilt, since a node built anew carries none of the comments written inside the old one.
 // A field keeps its place, a new one goes last, and a value replaced keeps the comments written before and after it.
 function update(doc, node, value) {
-  for (const pair of [...node.items]) {
-    const key = pair.key?.value ?? pair.key;
-    if (!Object.hasOwn(value, key)) node.delete(key);
-  }
-  for (const [key, next] of Object.entries(value)) {
+  // Listed before any is deleted, since deleting one while going through them skips the next.
+  const dropped = node.items.filter((pair) => !Object.hasOwn(value, nameOf(pair)));
+  for (const pair of dropped) node.delete(pair.key);
+  for (const [name, next] of Object.entries(value)) {
+    const key = keyIn(node, name);
     const child = node.get(key, true);
     if (isMap(child) && isObject(next)) {
       update(doc, child, next);
@@ -68,5 +82,6 @@ function update(doc, node, value) {
 }
 
 export function deleteEntry(document, map, key) {
-  document.doc.deleteIn([map, key]);
+  const { doc } = document;
+  doc.deleteIn([map, keyIn(doc.get(map, true), key)]);
 }

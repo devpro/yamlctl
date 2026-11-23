@@ -31,8 +31,11 @@ export function openFile(file) {
   }
   const maps = schema ? schema.entryMaps() : mapsWithoutSchema(document.data);
   const singulars = Object.fromEntries(maps.map((map) => [map, schema?.mapOptions(map).singular]).filter(([, singular]) => typeof singular === 'string' && singular));
-  return { file, document, schema, schemaPath: schema ? schema.path : found.uri ? displayUri(found.uri) : null, schemaError, maps, singulars };
+  const schemaPath = schema ? schema.path : namedPath(found);
+  return { file, document, schema, schemaPath, schemaError, maps, singulars };
 }
+
+const namedPath = (found) => (found.uri ? displayUri(found.uri) : null);
 
 // The map a name on the command line means in one opened file: the map of that name, else the one declaring it as its singular.
 function mapNamed(opened, name) {
@@ -83,10 +86,13 @@ export function resolveResource({ dir, name, file = null }) {
   const named = files.filter((path) => stem(path) === name || basename(path) === name);
   if (named.length) {
     const maps = [...new Set(named.flatMap((path) => openFile(path).maps))];
-    throw new Error(`${named.map((path) => basename(path)).join(' and ')} ${named.length > 1 ? 'are files' : 'is a file'} rather than a resource, ${maps.length ? `use ${maps.map((map) => `yamlctl ${map} ...`).join(', ')}` : 'and holds no map of entries'}`);
+    const commands = maps.map((map) => `yamlctl ${map} ...`).join(', ');
+    const hint = maps.length ? `use ${commands}` : 'and holds no map of entries';
+    throw new Error(`${named.map((path) => basename(path)).join(' and ')} ${named.length > 1 ? 'are files' : 'is a file'} rather than a resource, ${hint}`);
   }
   const known = listResources(dir).filter((resource) => resource.name).map((resource) => resource.name);
-  throw new Error(`no resource ${name} in ${dir}${known.length ? `, the resources are ${known.join(', ')}` : files.length ? ', which holds no map of entries' : ', which holds no YAML data file'}`);
+  if (known.length) throw new Error(`no resource ${name} in ${dir}, the resources are ${known.join(', ')}`);
+  throw new Error(`no resource ${name} in ${dir}, which holds no ${files.length ? 'map of entries' : 'YAML data file'}`);
 }
 
 // Every name the command line accepts, the way `kubectl api-resources` lists them.

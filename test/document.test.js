@@ -106,3 +106,33 @@ test('an empty file reads as an empty mapping', () => {
 test('a file that does not exist is named', () => {
   assert.throws(() => readDocument(join(emptyDir(), 'none.yaml')), /cannot read .*none\.yaml/);
 });
+
+test('fields dropped from an entry are all dropped, neighbours included', () => {
+  const dir = emptyDir();
+  write(dir, 'data.yaml', 'items:\n  one:\n    a: 1\n    b: 2\n    c: 3\n    d: 4 # kept\n');
+  const document = readDocument(join(dir, 'data.yaml'));
+  setEntry(document, 'items', 'one', { d: 4 });
+  writeDocument(document);
+  assert.equal(read(dir, 'data.yaml'), 'items:\n  one:\n    d: 4 # kept\n');
+});
+
+test('a key YAML reads as a number or a boolean is the one changed and deleted, never written twice', () => {
+  const dir = emptyDir();
+  write(dir, 'data.yaml', 'items:\n  1:\n    80: a # kept\n    true: x\n    : empty\n    old: 1\n  2:\n    a: 1\n');
+  const document = readDocument(join(dir, 'data.yaml'));
+  setEntry(document, 'items', '1', { 80: 'b', true: 'y', '': 'empty' });
+  deleteEntry(document, 'items', '2');
+  writeDocument(document);
+  assert.equal(read(dir, 'data.yaml'), 'items:\n  1:\n    80: "b" # kept\n    true: "y"\n    : empty\n');
+  assert.deepEqual(readDocument(join(dir, 'data.yaml')).data, { items: { 1: { 80: 'b', true: 'y', '': 'empty' } } });
+});
+
+test('a file laid out another way is left alone when nothing changed', () => {
+  const dir = emptyDir();
+  const text = 'items:\n    one:\n        a:   1\n        b: "\\u00e9"\n';
+  write(dir, 'data.yaml', text);
+  const document = readDocument(join(dir, 'data.yaml'));
+  setEntry(document, 'items', 'one', { a: 1, b: '\u00e9' });
+  assert.equal(writeDocument(document), false);
+  assert.equal(read(dir, 'data.yaml'), text);
+});

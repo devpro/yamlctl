@@ -169,5 +169,6 @@ function writeCache(uri, document, env) {
 
 function age(ms) {
   const hours = Math.round(ms / 3600000);
-  return hours < 48 ? `${hours} hour${hours === 1 ? '' : 's'}` : `${Math.round(hours / 24)} days`;
+  if (hours >= 48) return `${Math.round(hours / 24)} days`;
+  return `${hours} hour${hours === 1 ? '' : 's'}`;
 }

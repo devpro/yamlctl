@@ -57,10 +57,20 @@ function pointerKeys(fragment, pointer) {
   return fragment
     .split('/')
     .filter(Boolean)
-    .map((key) => decodeURIComponent(key).replace(/~1/g, '/').replace(/~0/g, '~'));
+    .map((key) => decodeURIComponent(key).replaceAll('~1', '/').replaceAll('~0', '~'));
+}
+
+function typeOf(value) {
+  if (value === null) return 'null';
+  return Array.isArray(value) ? 'array' : typeof value;
 }
 
 const isNull = (schema) => schema?.type === 'null' || (Array.isArray(schema?.type) && schema.type.length === 1 && schema.type[0] === 'null');
+
+function validatorOf(draft) {
+  if (draft.includes('2020-12')) return Ajv2020;
+  return draft.includes('2019-09') ? Ajv2019 : Ajv;
+}
 
 export class Schema {
   // `uri` defaults to an address of its own for a schema built in memory.
@@ -73,7 +83,7 @@ export class Schema {
     this.bases = new Map([[uri, baseOf(root, uri)]]);
     this.missing = [];
     const draft = String(root.$schema ?? '');
-    const Validator = draft.includes('2020-12') ? Ajv2020 : draft.includes('2019-09') ? Ajv2019 : Ajv;
+    const Validator = validatorOf(draft);
     // Unknown formats and keywords are tolerated rather than refused, since a schema written for an editor carries both and they say nothing about validity.
     this.ajv = new Validator({ allErrors: true, strict: false, validateFormats: false });
     this.ajv.addKeyword(EXTENSION);
@@ -210,13 +220,13 @@ export class Schema {
     if (!check) throw new Error(`cannot compile the schema at ${full}`);
     if (check(value)) return [];
     // A branch allowing null never explains anything, since the value is not null.
-    let errors = (check.errors ?? []).filter((error) => !(error.keyword === 'type' && [].concat(error.params.type).join() === 'null'));
+    let errors = (check.errors ?? []).filter((error) => !(error.keyword === 'type' && [error.params.type].flat().join() === 'null'));
     const closest = [];
     const handled = [];
     const alternatives = errors.filter((error) => error.keyword === 'anyOf' || error.keyword === 'oneOf').sort((x, y) => x.instancePath.length - y.instancePath.length);
     for (const alternative of alternatives) {
       if (handled.some((path) => within(alternative.instancePath, path))) continue;
-      const branches = depth < 8 ? this.branches(full.includes('#') ? full : `${full}#`, alternative, value) : null;
+      const branches = depth < 8 ? this.branches(full, alternative, value) : null;
       if (!branches) continue;
       const here = `${prefix}${dotted(alternative.instancePath)}`;
       const results = branches.map((branch) => this.validate(branch.pointer, branch.value, here, depth + 1));
@@ -237,8 +247,8 @@ export class Schema {
 
   // The branches of the alternative an error reports, each as the pointer to validate and the value it applies to, or null when the alternative cannot be located.
   branches(pointer, error, value) {
-    const segments = error.instancePath.split('/').slice(1).map((key) => key.replace(/~1/g, '/').replace(/~0/g, '~'));
-    let here = this.unwrapRef(pointer);
+    const segments = error.instancePath.split('/').slice(1).map((key) => key.replaceAll('~1', '/').replaceAll('~0', '~'));
+    let here = this.unwrapRef(pointer.includes('#') ? pointer : `${pointer}#`);
     let data = value;
     for (const segment of segments) {
       const { schema } = this.at(here);
@@ -264,7 +274,7 @@ export class Schema {
   typeMatches(pointer, value) {
     const allowed = types(this.unwrap(pointer).schema);
     if (!allowed.length) return true;
-    const actual = value === null ? 'null' : Array.isArray(value) ? 'array' : typeof value;
+    const actual = typeOf(value);
     if (actual === 'number') return allowed.includes('number') || (allowed.includes('integer') && Number.isInteger(value));
     return allowed.includes(actual);
   }
@@ -291,11 +301,11 @@ export class Schema {
 }
 
 // A key as one segment of a JSON pointer, escaped the way RFC 6901 and a URI fragment both require.
-export const escapeKey = (key) => encodeURIComponent(String(key).replace(/~/g, '~0').replace(/\//g, '~1'));
+export const escapeKey = (key) => encodeURIComponent(String(key).replaceAll('~', '~0').replaceAll('/', '~1'));
 
 export function types(schema) {
   if (!schema) return [];
-  if (schema.type) return [].concat(schema.type);
+  if (schema.type) return [schema.type].flat();
   if (schema.properties || schema.additionalProperties !== undefined) return ['object'];
   if (schema.items) return ['array'];
   return [];
@@ -333,7 +343,7 @@ function fromEnum(values, text) {
 }
 
 const within = (path, root) => path === root || path.startsWith(`${root}/`);
-const dotted = (instancePath) => instancePath.replace(/\//g, '.').replace(/~1/g, '/').replace(/~0/g, '~');
+const dotted = (instancePath) => instancePath.replaceAll('/', '.').replaceAll('~1', '/').replaceAll('~0', '~');
 
 function formatErrors(errors, prefix) {
   const seen = new Set();
@@ -356,7 +366,7 @@ function describe(error) {
   if (keyword === 'enum') return `must be one of ${params.allowedValues.filter((v) => v !== null).map((v) => JSON.stringify(v)).join(', ')}`;
   if (keyword === 'const') return `must be ${JSON.stringify(params.allowedValue)}`;
   if (keyword === 'required') return `missing required field ${params.missingProperty}`;
-  if (keyword === 'type') return `must be ${[].concat(params.type).join(' or ')}`;
+  if (keyword === 'type') return `must be ${[params.type].flat().join(' or ')}`;
   // A pattern can hold a line break, which printed raw splits one message over two lines.
   if (keyword === 'pattern') return `must match the pattern ${JSON.stringify(params.pattern)}`;
   if (keyword === 'oneOf') return params.passingSchemas ? 'matches more than one of the alternatives, where exactly one is expected' : 'matches none of the alternatives';
